@@ -16,16 +16,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build the dev container and run the repository CI contract
-        run: docker build --file .devcontainer/Dockerfile --tag accountable-devcontainer:ci .
+        run: |
+          docker build \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
+            --file .devcontainer/Dockerfile \
+            --tag accountable-devcontainer:ci \
+            .
 
       - name: Run the same root Task command in the dev container
         run: |
           docker run --rm \
-            --user "$(id -u):$(id -g)" \
             --volume "$GITHUB_WORKSPACE:/workspaces/accountable" \
             --workdir /workspaces/accountable \
             --env CI=1 \
-            --env HOME=/tmp/accountable-home \
-            --env MISE_DATA_DIR=/tmp/accountable-mise-data \
-            --env MISE_CONFIG_DIR=/tmp/accountable-mise-config \
             accountable-devcontainer:ci bash .devcontainer/parity.sh

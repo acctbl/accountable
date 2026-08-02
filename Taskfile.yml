@@ -189,3 +189,18 @@ tasks:
       - pnpm install --frozen-lockfile --ignore-scripts
       - task: security
       - task: prove:security
+
+  container:parity:
+    desc: Build the dev container and run the normal CI Task command inside it
+    cmds:
+      - docker build --file .devcontainer/Dockerfile --tag accountable-devcontainer:local .
+      - |
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          --volume "{{.TASKFILE_DIR}}:/workspaces/accountable" \
+          --workdir /workspaces/accountable \
+          --env CI=1 \
+          --env HOME=/tmp/accountable-home \
+          --env MISE_DATA_DIR=/tmp/accountable-mise-data \
+          --env MISE_CONFIG_DIR=/tmp/accountable-mise-config \
+          accountable-devcontainer:local bash .devcontainer/parity.sh

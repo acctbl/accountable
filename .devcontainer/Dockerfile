@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1.7
 
-# Ubuntu is kept on the same LTS release used by GitHub-hosted CI runners.
 FROM ubuntu:24.04
 
 ARG TARGETARCH
@@ -8,9 +7,6 @@ ARG MISE_VERSION=2026.7.13
 
 USER root
 
-# Keep the base image small while declaring every OS-level requirement needed by
-# mise, OpenTofu, and Chromium. Browser binaries themselves are installed by
-# the repository's `task setup` command after the workspace is available.
 RUN apt-get update \
 	&& apt-get install --yes --no-install-recommends \
 		bash \
@@ -24,6 +20,7 @@ RUN apt-get update \
 		fonts-liberation \
 		fonts-noto-color-emoji \
 		libasound2t64 \
+		libatomic1 \
 		libatk-bridge2.0-0t64 \
 		libatk1.0-0t64 \
 		libatspi2.0-0t64 \
@@ -44,19 +41,12 @@ RUN apt-get update \
 		libxfixes3 \
 		libxkbcommon0 \
 		libxrandr2 \
-	&& rm -rf /var/lib/apt/lists/*
-
-# Use a non-root account both locally and in Codespaces. Its UID is updated by
-# the Dev Containers client for local bind mounts.
-RUN groupadd --gid 1000 devcontainer \
-	&& useradd --uid 1000 --gid devcontainer --create-home --shell /bin/bash devcontainer \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& groupadd devcontainer \
+	&& useradd --gid devcontainer --create-home --shell /bin/bash devcontainer \
 	&& echo 'devcontainer ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/devcontainer \
-	&& chmod 0440 /etc/sudoers.d/devcontainer
-
-# Install the same mise release pinned in .github/workflows/ci.yml. The
-# architecture-specific release checksums keep the bootstrap supply chain
-# explicit instead of relying on an image-local tool manager.
-RUN case "${TARGETARCH}" in \
+	&& chmod 0440 /etc/sudoers.d/devcontainer \
+	&& case "${TARGETARCH}" in \
 		amd64) mise_arch=x64; mise_sha256=c0d9e71f51bee64e11f1cb9fc179023daed77fe1e594cfb88b615ce4365c2b47 ;; \
 		arm64) mise_arch=arm64; mise_sha256=f115d1f911b8eed1bdc9d889d94ff6fdaf892131d573b5678914b2bcf14b2965 ;; \
 		*) echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \

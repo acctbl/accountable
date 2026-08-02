@@ -36,6 +36,8 @@ apps/web/public/swe-worker*
 .pnpm-debug.log*
 
 .scratch/
+.security/allowlists/
+dist/sbom*.json
 
 test-results/
 playwright-report/

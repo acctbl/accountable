@@ -1,0 +1,74 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react"],
+  "jsPlugins": ["oxlint-tailwindcss"],
+  "categories": {
+    "correctness": "off",
+    "suspicious": "off",
+    "perf": "off",
+    "style": "off",
+    "pedantic": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.output/**",
+    "**/routeTree.gen.ts",
+    "cmd/**"
+  ],
+  "options": {
+    "typeAware": true
+  },
+  "settings": {
+    "tailwindcss": {
+      "entryPoint": [
+        { "files": "apps/web/**", "use": "apps/web/src/styles.css" },
+        {
+          "files": "packages/ui/**",
+          "use": "packages/ui/src/styles/globals.css"
+        },
+        { "files": "**", "use": "apps/web/src/styles.css" }
+      ]
+    }
+  },
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/require-await": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+
+    "react/jsx-no-literals": [
+      "error",
+      {
+        "noStrings": true,
+        "ignoreProps": true,
+        "restrictedAttributes": [
+          "aria-label",
+          "aria-description",
+          "aria-placeholder",
+          "aria-roledescription",
+          "aria-valuetext",
+          "placeholder",
+          "title",
+          "alt",
+          "label"
+        ],
+        "allowedStrings": [" ", ":", "/", "-", "|"],
+        "elementOverrides": {
+          "FormattedMessage": { "allowElement": true }
+        }
+      }
+    ],
+
+    "tailwindcss/no-unknown-classes": "error",
+    "tailwindcss/no-duplicate-classes": "error",
+    "tailwindcss/no-conflicting-classes": "error",
+    "tailwindcss/no-deprecated-classes": "error",
+    "tailwindcss/enforce-logical": ["error", { "direction": "inline" }],
+    "tailwindcss/enforce-sort-order": "error"
+  }
+}

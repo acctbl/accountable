@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package accountable.system.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service SystemService {
+    rpc GetRuntime(GetRuntimeRequest) returns (GetRuntimeResponse);
+}
+
+message GetRuntimeRequest {}
+
+message GetRuntimeResponse {
+    string release_id = 1;
+    google.protobuf.Timestamp server_time = 2;
+    string request_id = 3;
+}

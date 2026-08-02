@@ -7,7 +7,7 @@ POSTGRES_TEST_IMAGE = "postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3
 
 [tools]
 go = "1.26.5"
-java = "21.0.2"
+java = "temurin-25"
 node = "26.0.0"
 "github:pnpm/pnpm" = "11.18.0"
 

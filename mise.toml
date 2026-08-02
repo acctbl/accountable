@@ -1,0 +1,24 @@
+[settings]
+experimental = true
+lockfile = true
+
+[env]
+POSTGRES_TEST_IMAGE = "postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
+
+[tools]
+go = "1.26.5"
+java = "21.0.2"
+node = "26.0.0"
+"github:pnpm/pnpm" = "11.18.0"
+
+"aqua:go-task/task" = "3.52.0"
+"aqua:bufbuild/buf" = "1.72.0"
+"aqua:opentofu/opentofu" = "1.12.5"
+"aqua:pressly/goose" = "3.27.3"
+"github:sqlc-dev/sqlc" = "1.31.1"
+"aqua:golangci/golangci-lint" = "2.12.2"
+
+[tools."http:tla-plus"]
+version = "1.8.0"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
+checksum = "sha256:e22f8ffb4bacdea0a871f444dd94fe5fb0d8013b3388ae39e82e26f852c735d5"

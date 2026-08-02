@@ -1,13 +1,37 @@
 # yaml-language-server: $schema=https://taskfile.dev/schema.json
 
-version: '3'
-
-vars:
-  GREETING: Hello, world!
+version: "3"
 
 tasks:
   default:
-    desc: Print a greeting message
+    desc: Run CI locally
     cmds:
-      - echo "{{.GREETING}}"
-    silent: true
+      - task: ci
+
+  setup:
+    desc: Install the exact tools and JavaScript packages for this repository
+    cmds:
+      - mise install --locked
+      - pnpm install --frozen-lockfile
+
+  generate:
+    desc: Regenerate protobuf code
+    cmds:
+      - buf generate
+
+  check:
+    desc: Lint, test, and check generated code
+    cmds:
+      - buf lint
+      - task generate
+      - git diff --exit-code -- gen packages/proto/src
+      - golangci-lint run
+      - pnpm lint
+      - go test ./...
+      - pnpm --filter @accountable/web test
+
+  ci:
+    desc: Set up and check the repository
+    deps: [setup]
+    cmds:
+      - task: check

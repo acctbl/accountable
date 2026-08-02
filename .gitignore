@@ -29,11 +29,20 @@ node_modules/
 dist/
 build/
 .pnpm-store/
+
+apps/web/public/sw*
+apps/web/public/swe-worker*
 *.log
 .pnpm-debug.log*
 
-gen/
 .scratch/
+
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+apps/web/src/i18n/compiled/
 
 .terraform/
 *.tfstate

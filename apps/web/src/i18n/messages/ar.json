@@ -1,0 +1,26 @@
+{
+  "errors.unknown": {
+    "defaultMessage": "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
+  },
+  "home.buttonLabel": {
+    "defaultMessage": "زر"
+  },
+  "home.runtimeConnected": {
+    "defaultMessage": "متصل ({releaseId})"
+  },
+  "home.runtimeLoading": {
+    "defaultMessage": "جارٍ الاتصال…"
+  },
+  "home.themeHint": {
+    "defaultMessage": "(اضغط <key>d</key> للتبديل بين الداكن والفاتح والنظام)"
+  },
+  "home.title": {
+    "defaultMessage": "المشروع جاهز!"
+  },
+  "localeSwitcher.label": {
+    "defaultMessage": "اللغة"
+  },
+  "localeSwitcher.loadError": {
+    "defaultMessage": "تعذّر تحميل هذه اللغة. يُرجى المحاولة مرة أخرى."
+  }
+}

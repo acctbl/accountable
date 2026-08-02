@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package accountable.type.v1;
+
+message LocalizedError {
+  string message_key = 1;
+}

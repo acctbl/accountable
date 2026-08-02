@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src", "vite.config.ts"],
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "webworker"],
+    "types": ["vite/client", "@serwist/vite/typings"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}

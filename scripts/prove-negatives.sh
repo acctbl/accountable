@@ -11,7 +11,9 @@ cleanup() {
 trap cleanup EXIT
 
 git worktree add --detach "$WORKTREE" HEAD >/dev/null
-git diff --binary HEAD | git -C "$WORKTREE" apply
+if ! git diff --quiet HEAD; then
+	git diff --binary HEAD | git -C "$WORKTREE" apply
+fi
 
 while IFS= read -r -d '' path; do
 	mkdir -p "$WORKTREE/$(dirname "$path")"

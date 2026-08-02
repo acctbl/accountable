@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="88.64 88.64 822.73 822.73" role="img" aria-label="Accountable favicon">
+  <title>Accountable favicon</title>
+  <defs>
+    <mask id="ring-holes" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000">
+      <rect width="1000" height="1000" fill="#ffffff"/>
+      <circle cx="223.63" cy="214.95" r="33.91" fill="#000000"/>
+      <circle cx="214.95" cy="776.37" r="33.91" fill="#000000"/>
+      <circle cx="776.37" cy="785.05" r="33.91" fill="#000000"/>
+      <circle cx="785.05" cy="223.63" r="33.91" fill="#000000"/>
+    </mask>
+    <g id="module">
+      <circle cx="223.63" cy="214.95" r="64.95" fill="#0A0A0A"/>
+      <path d="M 223.63 214.95 L 582.62 374.10 L 629.84 267.59" fill="none" stroke="#0A0A0A" stroke-width="72.82" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 430.28 204.48 L 540.15 253.18" fill="none" stroke="#0A0A0A" stroke-width="72.82" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <g mask="url(#ring-holes)">
+    <use href="#module"/>
+    <use href="#module" transform="rotate(-90 500 500)"/>
+    <use href="#module" transform="rotate(-180 500 500)"/>
+    <use href="#module" transform="rotate(-270 500 500)"/>
+  </g>
+</svg>

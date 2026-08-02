@@ -1,0 +1,109 @@
+name: Slice
+description: Just-in-time slice issue for active foundation or product work
+title: "[SLICE-ID] outcome"
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Create one primary issue per actionable slice.
+        Do not pre-create the full backlog or paste Pack 4–6 checklists here.
+        Pull requests name the stable work-item IDs they implement.
+
+  - type: input
+    id: slice_id
+    attributes:
+      label: Stable slice ID
+      description: For example F0.S1
+      placeholder: F0.S1
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Slice outcome
+      description: Observable end state that closes this slice
+      placeholder: A fresh machine can check out the repo and run the same deterministic validation…
+    validations:
+      required: true
+
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone
+      description: Built-in GitHub milestone name
+      placeholder: F0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Highest risk class
+      options:
+        - R0
+        - R1
+        - R2
+        - R3
+        - R4
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Hard dependencies
+      description: Predecessor slices or work items that must be done first. Use none if none.
+      placeholder: |
+        - none
+    validations:
+      required: true
+
+  - type: textarea
+    id: work_items
+    attributes:
+      label: Stable work-item checklist
+      description: Checklist of this slice’s stable work-item IDs only
+      value: |
+        - [ ] F0-0X — …
+    validations:
+      required: true
+
+  - type: input
+    id: pack_link
+    attributes:
+      label: Locked Pack 6 reference
+      description: URL or path to Pack 6 at a pinned revision (planning source of truth)
+      placeholder: https://…/06_Stage_6_Pack_6_Executable_Foundation_Backlog.md@<rev>
+    validations:
+      required: true
+
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      description: GitHub handle; also set the issue Assignee
+      placeholder: "@iamtemi"
+    validations:
+      required: true
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Blockers, deviations, and decisions
+      description: Current blockers, accepted deviations, and decision links. Use none if none.
+      value: |
+        - none
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence links
+      description: PRs, CI runs, proofs, and other evidence for completed work items
+      value: |
+        - …
+    validations:
+      required: true

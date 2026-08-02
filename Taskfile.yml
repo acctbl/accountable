@@ -130,9 +130,62 @@ tasks:
     cmds:
       - bash scripts/prove-negatives.sh
 
+  security:exceptions:
+    desc: Validate dated exceptions and regenerate scanner allowlists
+    cmds:
+      - node scripts/security/exceptions-to-allowlists.mjs
+
+  security:gitleaks:
+    desc: Scan the tree for committed secrets
+    cmds:
+      - bash scripts/security/gitleaks.sh
+
+  security:govulncheck:
+    desc: Fail on known Go module vulnerabilities
+    cmds:
+      - bash scripts/security/govulncheck.sh
+
+  security:trivy:
+    desc: Scan dependencies and OpenTofu for HIGH/CRITICAL issues
+    cmds:
+      - bash scripts/security/trivy.sh
+
+  security:lockfile:
+    desc: Require committed lockfiles and reject floating :latest tags
+    cmds:
+      - bash scripts/security/check-lockfiles.sh
+
+  security:sbom:
+    desc: Produce a CycloneDX SBOM under dist/
+    cmds:
+      - bash scripts/security/sbom.sh
+
+  security:
+    desc: Full security and supply-chain gate set
+    cmds:
+      - task: security:exceptions
+      - task: security:gitleaks
+      - task: security:govulncheck
+      - task: security:trivy
+      - task: security:lockfile
+      - task: security:sbom
+
+  prove:security:
+    desc: Prove each security gate fails on a seeded finding
+    cmds:
+      - bash scripts/security/prove-negatives.sh
+
   ci:
     desc: Set up and check the repository
     deps: [setup]
     cmds:
       - task: check
       - task: prove:negatives
+
+  ci:security:
+    desc: Install tools and run security gates with negative proofs
+    cmds:
+      - mise install --locked
+      - pnpm install --frozen-lockfile --ignore-scripts
+      - task: security
+      - task: prove:security

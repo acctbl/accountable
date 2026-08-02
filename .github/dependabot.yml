@@ -7,6 +7,8 @@ updates:
       interval: weekly
       time: "06:00"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: npm
     directory: /
@@ -15,6 +17,10 @@ updates:
       interval: weekly
       time: "06:00"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      
     groups:
       production-deps:
         dependency-type: production
@@ -28,6 +34,8 @@ updates:
       interval: weekly
       time: "06:00"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /
@@ -36,6 +44,8 @@ updates:
       interval: weekly
       time: "06:00"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: terraform
     directory: /infra
@@ -44,3 +54,5 @@ updates:
       interval: weekly
       time: "06:00"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7

@@ -16,7 +16,14 @@
     "**/dist/**",
     "**/.output/**",
     "**/routeTree.gen.ts",
-    "cmd/**"
+    "cmd/**",
+    "gen/**",
+    "packages/proto/src/**",
+    "testdata/**",
+    "tests/**",
+    "infra/**",
+    "db/**",
+    "scripts/**"
   ],
   "options": {
     "typeAware": true

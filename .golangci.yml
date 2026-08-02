@@ -1,0 +1,33 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        no-cmd-from-internal:
+          files:
+            - "**/internal/**/*.go"
+          deny:
+            - pkg: github.com/acctbl/accountable/cmd
+              desc: internal packages must not import cmd
+        no-internal-from-gen:
+          files:
+            - "**/gen/**/*.go"
+          deny:
+            - pkg: github.com/acctbl/accountable/internal
+              desc: generated code must not import internal
+        no-testforbidden:
+          files:
+            - "$all"
+            - "!**/internal/testforbidden/**"
+            - "!**/testdata/**"
+          deny:
+            - pkg: github.com/acctbl/accountable/internal/testforbidden
+              desc: do not import internal/testforbidden
+
+formatters:
+  enable:
+    - gofmt

@@ -13,25 +13,126 @@ tasks:
     cmds:
       - mise install --locked
       - pnpm install --frozen-lockfile
+      - |
+        if [ -n "${CI:-}" ]; then
+          pnpm exec playwright install --with-deps chromium
+        else
+          pnpm exec playwright install chromium
+        fi
 
   generate:
-    desc: Regenerate protobuf code
+    desc: Regenerate versioned code
     cmds:
       - buf generate
+      - pnpm --filter @accountable/web generate-routes
 
-  check:
-    desc: Lint, test, and check generated code
+  format:
+    desc: Check formatting (Go + Biome)
+    cmds:
+      - |
+        unformatted="$(gofmt -l cmd internal)"
+        if [ -n "$unformatted" ]; then
+          echo "gofmt needed on:" >&2
+          echo "$unformatted" >&2
+          exit 1
+        fi
+      - pnpm format:check
+
+  lint:
+    desc: Lint Buf, Go, and JavaScript/TypeScript
     cmds:
       - buf lint
-      - task generate
-      - git diff --exit-code -- gen packages/proto/src
-      - golangci-lint run
+      - golangci-lint run ./cmd/... ./internal/...
       - pnpm lint
-      - go test ./...
-      - pnpm --filter @accountable/web test
+
+  gen:fresh:
+    desc: Fail if generated protobuf output does not match the committed tree
+    deps: [generate]
+    cmds:
+      - git diff --exit-code -- gen packages/proto/src apps/web/src/routeTree.gen.ts
+      - |
+        untracked="$(git ls-files --others --exclude-standard -- gen packages/proto/src)"
+        if [ -n "$untracked" ]; then
+          echo "generated output has untracked files; commit them:" >&2
+          echo "$untracked" >&2
+          exit 1
+        fi
+
+  compile:
+    desc: Compile Go and TypeScript
+    cmds:
+      - go build ./...
+      - pnpm typecheck
+
+  test:unit:
+    desc: Run unit tests with the Go race detector
+    cmds:
+      - go test -race ./... -skip Integration
+      - pnpm -r --if-present test:unit
+
+  test:component:
+    desc: Run component tests
+    cmds:
+      - pnpm -r --if-present test:component
+
+  test:integration:
+    desc: Run the integration-test skeleton
+    cmds:
+      - go test -race ./internal/server -run Integration
+      - pnpm exec playwright test tests/integration --project=chromium
+
+  test:fuzz:
+    desc: Run fuzz targets against the committed seed corpus only
+    cmds:
+      - go test -race ./... -run '^Fuzz' -count=1
+
+  migrate:
+    desc: Validate goose migrations
+    cmds:
+      - goose -dir db/migrations validate
+
+  tofu:
+    desc: Format-check and validate OpenTofu
+    dir: infra
+    cmds:
+      - tofu fmt -check -recursive
+      - tofu init -backend=false -input=false
+      - tofu validate
+
+  i18n:
+    desc: Check localisation catalogs are extracted, valid, and complete
+    cmds:
+      - pnpm --filter @accountable/web i18n:check
+
+  a11y:
+    desc: Run accessibility checks
+    cmds:
+      - pnpm exec playwright test tests/a11y/web.spec.ts --project=chromium
+
+  check:
+    desc: Full mechanical gate set
+    cmds:
+      - task: format
+      - task: lint
+      - task: gen:fresh
+      - task: compile
+      - task: test:unit
+      - task: test:component
+      - task: test:integration
+      - task: test:fuzz
+      - task: migrate
+      - task: tofu
+      - task: i18n
+      - task: a11y
+
+  prove:negatives:
+    desc: Prove each deliberate failure fails the expected gate
+    cmds:
+      - bash scripts/prove-negatives.sh
 
   ci:
     desc: Set up and check the repository
     deps: [setup]
     cmds:
       - task: check
+      - task: prove:negatives

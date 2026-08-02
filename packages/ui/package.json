@@ -5,7 +5,12 @@
   "scripts": {
     "lint": "biome lint",
     "format": "biome format",
-    "check": "biome check"
+    "format:check": "biome check --formatter-enabled=true --linter-enabled=false --assist-enabled=false .",
+    "check": "biome check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit --passWithNoTests",
+    "test:component": "vitest run --project component"
   },
   "peerDependencies": {
     "react": "catalog:",
@@ -24,14 +29,17 @@
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "happy-dom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "exports": {
     "./globals.css": "./src/styles/globals.css",

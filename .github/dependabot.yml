@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
+    target-branch: develop
     schedule:
       day: monday
       interval: weekly
@@ -12,6 +13,7 @@ updates:
 
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       day: monday
       interval: weekly
@@ -29,6 +31,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       day: monday
       interval: weekly
@@ -39,6 +42,7 @@ updates:
 
   - package-ecosystem: docker
     directory: /
+    target-branch: develop
     schedule:
       day: monday
       interval: weekly
@@ -49,6 +53,7 @@ updates:
 
   - package-ecosystem: terraform
     directory: /infra
+    target-branch: develop
     schedule:
       day: monday
       interval: weekly

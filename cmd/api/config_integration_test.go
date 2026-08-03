@@ -26,7 +26,44 @@ allowed_origins = ["https://shell.example"]
 trusted_proxy_cidrs = []
 unary_rpc_timeout = "10s"
 stream_rpc_timeout = "25s"
+
+[secrets]
+provider = "file"
+directory = "secrets"
+
+[database]
+dsn_ref = "database.api_dsn"
+connect_timeout = "5s"
+health_check_interval = "2s"
+max_connections = 16
+timezone = "UTC"
+
+[storage]
+provider = "filesystem"
+root = "storage"
+
+[crypto]
+provider = "local"
+key_ref = "crypto.primary_key"
 `, environment, architectureProbe)
+}
+
+func TestConfigRequiresFoundationDependencies(t *testing.T) {
+	t.Parallel()
+
+	path := writeAPIConfig(t, `environment = "development"
+listen_address = "127.0.0.1:8080"
+architecture_probe = false
+allowed_origins = ["http://localhost:3000"]
+trusted_proxy_cidrs = []
+unary_rpc_timeout = "10s"
+stream_rpc_timeout = "25s"
+`)
+
+	_, err := loadConfig([]string{"--config", path})
+	if err == nil || !strings.Contains(err.Error(), "secrets") {
+		t.Fatalf("loadConfig error = %v, want missing secrets refusal", err)
+	}
 }
 
 func TestRunRequiresOneAbsoluteConfigPath(t *testing.T) {
@@ -56,18 +93,28 @@ func TestProductionConfigCannotInheritDevelopmentDefaults(t *testing.T) {
 	}
 }
 
-func TestProductionConfigIsCompleteAndExplicit(t *testing.T) {
+func TestNonProductionConfigIsCompleteAndExplicit(t *testing.T) {
 	t.Parallel()
 
-	path := writeAPIConfig(t, completeAPIConfig("production", false))
+	path := writeAPIConfig(t, completeAPIConfig("staging", false))
 	loaded, err := loadConfig([]string{"--config", path})
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	if loaded.Environment != "production" || loaded.Addr != "127.0.0.1:8080" ||
+	if loaded.Environment != "staging" || loaded.Addr != "127.0.0.1:8080" ||
 		len(loaded.AllowedOrigins) != 1 || loaded.UnaryRPCDeadline.String() != "10s" ||
 		loaded.StreamRPCDeadline.String() != "25s" {
 		t.Fatalf("loaded config = %+v", loaded)
+	}
+}
+
+func TestProductionRefusesUndecidedFoundationProviders(t *testing.T) {
+	t.Parallel()
+
+	path := writeAPIConfig(t, completeAPIConfig("production", false))
+	_, err := loadConfig([]string{"--config", path})
+	if err == nil || !strings.Contains(err.Error(), "production foundation providers") {
+		t.Fatalf("loadConfig error = %v, want production provider refusal", err)
 	}
 }
 
@@ -100,9 +147,15 @@ func TestConfigRejectsNonOriginCORSValue(t *testing.T) {
 func TestConfigRejectsRelativeTLSPaths(t *testing.T) {
 	t.Parallel()
 
-	path := writeAPIConfig(t, completeAPIConfig("development", false)+`tls_certificate_file = "cert.pem"
-tls_private_key_file = "key.pem"
-`)
+	contents := strings.Replace(
+		completeAPIConfig("development", false),
+		`stream_rpc_timeout = "25s"`,
+		`stream_rpc_timeout = "25s"
+tls_certificate_file = "cert.pem"
+tls_private_key_file = "key.pem"`,
+		1,
+	)
+	path := writeAPIConfig(t, contents)
 	_, err := loadConfig([]string{"--config", path})
 	if err == nil || !strings.Contains(err.Error(), "absolute path") {
 		t.Fatalf("loadConfig error = %v, want absolute TLS path rejection", err)
@@ -126,5 +179,22 @@ surprise = "not allowed"
 	_, err := loadConfig([]string{"--config", path})
 	if err == nil || !strings.Contains(err.Error(), "strict mode") {
 		t.Fatalf("loadConfig error = %v, want unknown field rejection", err)
+	}
+}
+
+func TestConfigRejectsInlineDatabaseSecret(t *testing.T) {
+	t.Parallel()
+
+	contents := strings.Replace(
+		completeAPIConfig("development", false),
+		`dsn_ref = "database.api_dsn"`,
+		`dsn_ref = "database.api_dsn"
+dsn = "postgres://accountable:secret@database/accountable"`,
+		1,
+	)
+	path := writeAPIConfig(t, contents)
+	_, err := loadConfig([]string{"--config", path})
+	if err == nil || !strings.Contains(err.Error(), "strict mode") {
+		t.Fatalf("loadConfig error = %v, want inline secret field rejection", err)
 	}
 }

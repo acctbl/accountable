@@ -22,9 +22,14 @@ tasks:
         fi
 
   api:dev:
-    desc: Run the API with the explicit local-development configuration
+    desc: Run migrated local Postgres and the API with file-backed local secrets
     cmds:
-      - go run ./cmd/api --config "{{.ROOT_DIR}}/config/development/api.toml"
+      - bash scripts/with-test-postgres.sh bash scripts/api-dev.sh
+
+  db:migrate:
+    desc: Apply compiled migrations through the explicit migrator binary
+    cmds:
+      - go run ./cmd/migrate --config "{{.ROOT_DIR}}/config/development/migrate.toml"
 
   generate:
     desc: Regenerate versioned code
@@ -120,15 +125,21 @@ tasks:
   test:integration:
     desc: Run integration tests in every Go package and Playwright
     cmds:
+      - task: test:postgres
       - go test -race ./... -run Integration
       - pnpm exec playwright test tests/integration
+
+  test:postgres:
+    desc: Prove bootstrap and migration refusals against real Postgres
+    cmds:
+      - bash scripts/with-test-postgres.sh go test -race ./internal/migration -run PostgresIntegration -count=1
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only
     cmds:
       - go test -race ./... -run '^Fuzz' -count=1
 
-  migrate:
+  migrations:check:
     desc: Validate goose migrations
     cmds:
       - goose -dir db/migrations validate
@@ -151,20 +162,30 @@ tasks:
     cmds:
       - pnpm exec playwright test tests/a11y/web.spec.ts
 
-  check:
-    desc: Full mechanical gate set
+  precommit:
+    desc: Fast mechanical gates for the pre-commit hook
     cmds:
       - task: format:check
       - task: lint
       - task: gen:fresh
+
+  prepush:
+    desc: Build and lightweight test gates for the pre-push hook
+    cmds:
       - task: compile
       - task: test:unit
       - task: test:component
+      - task: i18n
+
+  check:
+    desc: Full mechanical gate set
+    cmds:
+      - task: precommit
+      - task: prepush
       - task: test:integration
       - task: test:fuzz
-      - task: migrate
+      - task: migrations:check
       - task: tofu
-      - task: i18n
       - task: a11y
 
   prove:negatives:

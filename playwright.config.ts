@@ -17,7 +17,7 @@ export default defineConfig({
 		trace: "on-first-retry",
 	},
 	webServer: {
-		command: "bash scripts/playwright-stack.sh",
+		command: "bash scripts/with-test-postgres.sh bash scripts/playwright-stack.sh",
 		url: baseURL,
 		ignoreHTTPSErrors: true,
 		gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },

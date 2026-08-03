@@ -4,4 +4,4 @@ set -euo pipefail
 repository_root="$(git rev-parse --show-toplevel)"
 cd "$repository_root"
 
-exec mise exec -- task precommit
+exec mise exec -- task prepush

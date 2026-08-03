@@ -243,10 +243,6 @@ export const FailureKindSchema: GenEnum<FailureKind> = /*@__PURE__*/
   enumDesc(file_accountable_probe_v1_architecture_probe, 0);
 
 /**
- * ArchitectureProbeService carries synthetic data only and is never mounted
- * in production. It proves browser transport capabilities independently of
- * product behaviour.
- *
  * @generated from service accountable.probe.v1.ArchitectureProbeService
  */
 export const ArchitectureProbeService: GenService<{

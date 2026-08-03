@@ -21,29 +21,34 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ScopeKind identifies the class of boundary in which a resource lives.
 type ScopeKind int32
 
 const (
-	ScopeKind_SCOPE_KIND_UNSPECIFIED  ScopeKind = 0
-	ScopeKind_SCOPE_KIND_ORGANIZATION ScopeKind = 1
-	ScopeKind_SCOPE_KIND_WORKSPACE    ScopeKind = 2
-	ScopeKind_SCOPE_KIND_USER         ScopeKind = 3
+	ScopeKind_SCOPE_KIND_UNSPECIFIED     ScopeKind = 0
+	ScopeKind_SCOPE_KIND_PLATFORM        ScopeKind = 1
+	ScopeKind_SCOPE_KIND_WORKSPACE       ScopeKind = 2
+	ScopeKind_SCOPE_KIND_ENTITY          ScopeKind = 3
+	ScopeKind_SCOPE_KIND_BILLING_ACCOUNT ScopeKind = 4
+	ScopeKind_SCOPE_KIND_PERSON          ScopeKind = 5
 )
 
 // Enum value maps for ScopeKind.
 var (
 	ScopeKind_name = map[int32]string{
 		0: "SCOPE_KIND_UNSPECIFIED",
-		1: "SCOPE_KIND_ORGANIZATION",
+		1: "SCOPE_KIND_PLATFORM",
 		2: "SCOPE_KIND_WORKSPACE",
-		3: "SCOPE_KIND_USER",
+		3: "SCOPE_KIND_ENTITY",
+		4: "SCOPE_KIND_BILLING_ACCOUNT",
+		5: "SCOPE_KIND_PERSON",
 	}
 	ScopeKind_value = map[string]int32{
-		"SCOPE_KIND_UNSPECIFIED":  0,
-		"SCOPE_KIND_ORGANIZATION": 1,
-		"SCOPE_KIND_WORKSPACE":    2,
-		"SCOPE_KIND_USER":         3,
+		"SCOPE_KIND_UNSPECIFIED":     0,
+		"SCOPE_KIND_PLATFORM":        1,
+		"SCOPE_KIND_WORKSPACE":       2,
+		"SCOPE_KIND_ENTITY":          3,
+		"SCOPE_KIND_BILLING_ACCOUNT": 4,
+		"SCOPE_KIND_PERSON":          5,
 	}
 )
 
@@ -74,11 +79,10 @@ func (ScopeKind) EnumDescriptor() ([]byte, []int) {
 	return file_accountable_common_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-// ScopeRef is the stable, typed reference to an owning scope.
 type ScopeRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          ScopeKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=accountable.common.v1.ScopeKind" json:"kind,omitempty"`
-	ScopeId       string                 `protobuf:"bytes,2,opt,name=scope_id,json=scopeId,proto3" json:"scope_id,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -120,20 +124,19 @@ func (x *ScopeRef) GetKind() ScopeKind {
 	return ScopeKind_SCOPE_KIND_UNSPECIFIED
 }
 
-func (x *ScopeRef) GetScopeId() string {
+func (x *ScopeRef) GetId() string {
 	if x != nil {
-		return x.ScopeId
+		return x.Id
 	}
 	return ""
 }
 
-// ResourceRef identifies a resource without embedding a generated DTO in a
-// domain package.
 type ResourceRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scope         *ScopeRef              `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Module        string                 `protobuf:"bytes,1,opt,name=module,proto3" json:"module,omitempty"`
 	ResourceType  string                 `protobuf:"bytes,2,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
 	ResourceId    string                 `protobuf:"bytes,3,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	Version       *uint64                `protobuf:"varint,4,opt,name=version,proto3,oneof" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -168,11 +171,11 @@ func (*ResourceRef) Descriptor() ([]byte, []int) {
 	return file_accountable_common_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ResourceRef) GetScope() *ScopeRef {
+func (x *ResourceRef) GetModule() string {
 	if x != nil {
-		return x.Scope
+		return x.Module
 	}
-	return nil
+	return ""
 }
 
 func (x *ResourceRef) GetResourceType() string {
@@ -189,7 +192,13 @@ func (x *ResourceRef) GetResourceId() string {
 	return ""
 }
 
-// CommandControl carries transport-safe command execution controls.
+func (x *ResourceRef) GetVersion() uint64 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
 type CommandControl struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	IdempotencyKey string                 `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
@@ -246,24 +255,29 @@ var File_accountable_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_accountable_common_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\"accountable/common/v1/common.proto\x12\x15accountable.common.v1\"[\n" +
+	"\"accountable/common/v1/common.proto\x12\x15accountable.common.v1\"P\n" +
 	"\bScopeRef\x124\n" +
-	"\x04kind\x18\x01 \x01(\x0e2 .accountable.common.v1.ScopeKindR\x04kind\x12\x19\n" +
-	"\bscope_id\x18\x02 \x01(\tR\ascopeId\"\x8a\x01\n" +
-	"\vResourceRef\x125\n" +
-	"\x05scope\x18\x01 \x01(\v2\x1f.accountable.common.v1.ScopeRefR\x05scope\x12#\n" +
+	"\x04kind\x18\x01 \x01(\x0e2 .accountable.common.v1.ScopeKindR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\x96\x01\n" +
+	"\vResourceRef\x12\x16\n" +
+	"\x06module\x18\x01 \x01(\tR\x06module\x12#\n" +
 	"\rresource_type\x18\x02 \x01(\tR\fresourceType\x12\x1f\n" +
 	"\vresource_id\x18\x03 \x01(\tR\n" +
-	"resourceId\"r\n" +
+	"resourceId\x12\x1d\n" +
+	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x88\x01\x01B\n" +
+	"\n" +
+	"\b_version\"r\n" +
 	"\x0eCommandControl\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12&\n" +
 	"\fversion_etag\x18\x02 \x01(\tH\x00R\vversionEtag\x88\x01\x01B\x0f\n" +
-	"\r_version_etag*s\n" +
+	"\r_version_etag*\xa8\x01\n" +
 	"\tScopeKind\x12\x1a\n" +
-	"\x16SCOPE_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17SCOPE_KIND_ORGANIZATION\x10\x01\x12\x18\n" +
-	"\x14SCOPE_KIND_WORKSPACE\x10\x02\x12\x13\n" +
-	"\x0fSCOPE_KIND_USER\x10\x03B\xe3\x01\n" +
+	"\x16SCOPE_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13SCOPE_KIND_PLATFORM\x10\x01\x12\x18\n" +
+	"\x14SCOPE_KIND_WORKSPACE\x10\x02\x12\x15\n" +
+	"\x11SCOPE_KIND_ENTITY\x10\x03\x12\x1e\n" +
+	"\x1aSCOPE_KIND_BILLING_ACCOUNT\x10\x04\x12\x15\n" +
+	"\x11SCOPE_KIND_PERSON\x10\x05B\xe3\x01\n" +
 	"\x19com.accountable.common.v1B\vCommonProtoP\x01ZCgithub.com/acctbl/accountable/gen/go/accountable/common/v1;commonv1\xa2\x02\x03ACX\xaa\x02\x15Accountable.Common.V1\xca\x02\x15Accountable\\Common\\V1\xe2\x02!Accountable\\Common\\V1\\GPBMetadata\xea\x02\x17Accountable::Common::V1b\x06proto3"
 
 var (
@@ -288,12 +302,11 @@ var file_accountable_common_v1_common_proto_goTypes = []any{
 }
 var file_accountable_common_v1_common_proto_depIdxs = []int32{
 	0, // 0: accountable.common.v1.ScopeRef.kind:type_name -> accountable.common.v1.ScopeKind
-	1, // 1: accountable.common.v1.ResourceRef.scope:type_name -> accountable.common.v1.ScopeRef
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_accountable_common_v1_common_proto_init() }
@@ -301,6 +314,7 @@ func file_accountable_common_v1_common_proto_init() {
 	if File_accountable_common_v1_common_proto != nil {
 		return
 	}
+	file_accountable_common_v1_common_proto_msgTypes[1].OneofWrappers = []any{}
 	file_accountable_common_v1_common_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

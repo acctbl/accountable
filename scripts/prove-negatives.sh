@@ -43,9 +43,8 @@ prove() {
 }
 
 echo "==> negative: dirty generated output"
-TARGET="gen/go/accountable/type/v1/localized_error.pb.go"
+TARGET="gen/go/accountable/common/v1/common.pb.go"
 printf '\n// stale-for-negative-proof\n' >>"$TARGET"
-git add "$TARGET"
 prove generated-dirty task gen:fresh
 
 echo "==> negative: prohibited import"

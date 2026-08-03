@@ -66,15 +66,37 @@ tasks:
       - pnpm lint
 
   gen:fresh:
-    desc: Fail if generated protobuf output does not match the committed tree
-    deps: [generate]
+    desc: Fail if regenerating would change generated output
     cmds:
-      - git diff --exit-code -- gen packages/proto/src apps/web/src/routeTree.gen.ts
       - |
-        untracked="$(git ls-files --others --exclude-standard -- gen packages/proto/src)"
-        if [ -n "$untracked" ]; then
-          echo "generated output has untracked files; commit them:" >&2
-          echo "$untracked" >&2
+        set -euo pipefail
+        paths=(gen packages/proto/src apps/web/src/routeTree.gen.ts)
+        snapshot="$(mktemp -d "${TMPDIR:-/tmp}/accountable-gen-fresh.XXXXXX")"
+        cleanup() { rm -rf "$snapshot"; }
+        trap cleanup EXIT
+
+        for path in "${paths[@]}"; do
+          if [ -e "$path" ]; then
+            mkdir -p "$snapshot/$(dirname "$path")"
+            cp -a "$path" "$snapshot/$path"
+          fi
+        done
+
+        task generate
+
+        status=0
+        : >"$snapshot/diff"
+        for path in "${paths[@]}"; do
+          if [ -e "$snapshot/$path" ] || [ -e "$path" ]; then
+            if ! diff -ru "$snapshot/$path" "$path" >>"$snapshot/diff" 2>&1; then
+              status=1
+            fi
+          fi
+        done
+
+        if [ "$status" -ne 0 ]; then
+          echo "generated output was stale; regenerate and commit the result:" >&2
+          cat "$snapshot/diff" >&2
           exit 1
         fi
 

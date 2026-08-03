@@ -1,0 +1,13 @@
+{
+  "name": "Accountable",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "devcontainer",
+  "updateRemoteUserUID": true,
+  "remoteEnv": {
+    "PATH": "/home/devcontainer/.local/share/mise/shims:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "mise trust mise.toml && mise install --locked && mise exec -- task setup"
+}

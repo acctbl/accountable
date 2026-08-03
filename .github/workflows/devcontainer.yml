@@ -1,0 +1,33 @@
+name: Dev container parity
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the dev container and run the repository CI contract
+        run: |
+          docker build \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
+            --file .devcontainer/Dockerfile \
+            --tag accountable-devcontainer:ci \
+            .
+
+      - name: Run the same root Task command in the dev container
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspaces/accountable" \
+            --workdir /workspaces/accountable \
+            --env CI=1 \
+            accountable-devcontainer:ci bash .devcontainer/parity.sh

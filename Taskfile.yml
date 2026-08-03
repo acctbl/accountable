@@ -14,7 +14,7 @@ tasks:
       - mise install --locked
       - pnpm install --frozen-lockfile
       - |
-        if [ -n "${CI:-}" ]; then
+        if [ -n "${CI:-}" ] && [ -z "${PLAYWRIGHT_OS_DEPS_INSTALLED:-}" ]; then
           pnpm exec playwright install --with-deps chromium
         else
           pnpm exec playwright install chromium
@@ -189,3 +189,41 @@ tasks:
       - pnpm install --frozen-lockfile --ignore-scripts
       - task: security
       - task: prove:security
+
+  container:parity:
+    desc: Build the dev container and run the normal CI Task command inside it
+    cmds:
+      - |
+        docker build \
+          --build-arg USER_UID="$(id -u)" \
+          --build-arg USER_GID="$(id -g)" \
+          --file .devcontainer/Dockerfile \
+          --tag accountable-devcontainer:local \
+          .
+      - |
+        docker run --rm \
+          --user root \
+          --volume accountable-devcontainer-node-modules:/workspaces/accountable/node_modules \
+          --volume accountable-devcontainer-admin-node-modules:/workspaces/accountable/apps/admin/node_modules \
+          --volume accountable-devcontainer-web-node-modules:/workspaces/accountable/apps/web/node_modules \
+          --volume accountable-devcontainer-proto-node-modules:/workspaces/accountable/packages/proto/node_modules \
+          --volume accountable-devcontainer-ui-node-modules:/workspaces/accountable/packages/ui/node_modules \
+          accountable-devcontainer:local \
+          chown devcontainer:"$(id -g)" \
+            /workspaces/accountable/node_modules \
+            /workspaces/accountable/apps/admin/node_modules \
+            /workspaces/accountable/apps/web/node_modules \
+            /workspaces/accountable/packages/proto/node_modules \
+            /workspaces/accountable/packages/ui/node_modules
+      - |
+        docker run --rm \
+          --volume "{{.TASKFILE_DIR}}:/workspaces/accountable" \
+          --volume accountable-devcontainer-home:/home/devcontainer \
+          --volume accountable-devcontainer-node-modules:/workspaces/accountable/node_modules \
+          --volume accountable-devcontainer-admin-node-modules:/workspaces/accountable/apps/admin/node_modules \
+          --volume accountable-devcontainer-web-node-modules:/workspaces/accountable/apps/web/node_modules \
+          --volume accountable-devcontainer-proto-node-modules:/workspaces/accountable/packages/proto/node_modules \
+          --volume accountable-devcontainer-ui-node-modules:/workspaces/accountable/packages/ui/node_modules \
+          --workdir /workspaces/accountable \
+          --env CI=1 \
+          accountable-devcontainer:local bash .devcontainer/parity.sh

@@ -1,0 +1,20 @@
+# The dev-container image never copies the workspace; source is mounted after
+# startup. Keep local build contexts fast and prevent ignored local material
+# from being sent to the Docker daemon.
+.git
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules
+**/node_modules
+.pnpm-store
+dist
+build
+coverage
+test-results
+playwright-report
+blob-report
+.cache
+.terraform
+.security

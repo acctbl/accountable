@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"github.com/acctbl/accountable/gen/go/accountable/system/v1/systemv1connect"
 	"github.com/acctbl/accountable/internal/apierror"
 	"github.com/acctbl/accountable/internal/configfile"
+	"github.com/acctbl/accountable/internal/foundation"
 	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/acctbl/accountable/internal/server"
 )
@@ -45,9 +47,11 @@ type config struct {
 	TLSKeyFile        string
 	UnaryRPCDeadline  time.Duration
 	StreamRPCDeadline time.Duration
+	Foundation        foundation.Config
 }
 
 type fileConfig struct {
+	foundation.FileConfig
 	Environment       string   `toml:"environment"`
 	ListenAddress     string   `toml:"listen_address"`
 	ArchitectureProbe *bool    `toml:"architecture_probe"`
@@ -120,6 +124,10 @@ func loadConfig(args []string) (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("trusted_proxy_cidrs: %w", err)
 	}
+	foundationConfig, err := foundation.Parse(raw.Environment, path, raw.FileConfig)
+	if err != nil {
+		return config{}, err
+	}
 	return config{
 		Addr:              raw.ListenAddress,
 		Environment:       raw.Environment,
@@ -130,6 +138,7 @@ func loadConfig(args []string) (config, error) {
 		TLSKeyFile:        raw.TLSPrivateKey,
 		UnaryRPCDeadline:  unaryDeadline,
 		StreamRPCDeadline: streamDeadline,
+		Foundation:        foundationConfig,
 	}, nil
 }
 
@@ -194,11 +203,12 @@ func newAPIHandlerWithSystem(
 		Unary:  config.UnaryRPCDeadline,
 		Stream: config.StreamRPCDeadline,
 	}
+	availability := server.AvailabilityInterceptor{Ready: ready.IsReady}
 	recoverPanic := func(ctx context.Context, _ connect.Spec, _ http.Header, _ any) error {
 		return apierror.New(ctx, apierror.InternalFailure, "errors.internal", nil, 0)
 	}
 	ordinaryOptions := []connect.HandlerOption{
-		connect.WithInterceptors(boundary, deadline),
+		connect.WithInterceptors(boundary, availability, deadline),
 		connect.WithRecover(recoverPanic),
 		connect.WithReadMaxBytes(ordinaryMessageMaxBytes),
 		connect.WithSendMaxBytes(ordinaryMessageMaxBytes),
@@ -210,7 +220,7 @@ func newAPIHandlerWithSystem(
 
 	if config.ArchitectureProbe {
 		probeOptions := []connect.HandlerOption{
-			connect.WithInterceptors(boundary, deadline),
+			connect.WithInterceptors(boundary, availability, deadline),
 			connect.WithRecover(recoverPanic),
 			connect.WithReadMaxBytes(streamMessageMaxBytes),
 			connect.WithSendMaxBytes(streamMessageMaxBytes),
@@ -223,7 +233,6 @@ func newAPIHandlerWithSystem(
 
 	handler := http.Handler(http.MaxBytesHandler(mux, uploadBodyMaxBytes))
 	handler = trustedProxyMiddleware(config.TrustedProxies, handler)
-	handler = drainingMiddleware(ready, handler)
 	return credentialedCORSMiddleware(config.AllowedOrigins, handler)
 }
 
@@ -240,16 +249,6 @@ func healthHandler(healthy func() bool) http.HandlerFunc {
 		response.WriteHeader(status)
 		_ = json.NewEncoder(response).Encode(payload)
 	}
-}
-
-func drainingMiddleware(ready *readiness, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/live" && request.URL.Path != "/ready" && !ready.IsReady() {
-			http.Error(response, "service unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		next.ServeHTTP(response, request)
-	})
 }
 
 func trustedProxyMiddleware(trusted []*net.IPNet, next http.Handler) http.Handler {
@@ -313,6 +312,40 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 }
 
 func serve(ctx context.Context, config config) error {
+	return bootstrapAndServe(
+		ctx,
+		config,
+		func(ctx context.Context, config foundation.Config) (ownedDependencySet, error) {
+			return foundation.Build(ctx, config)
+		},
+		serveWithDependencies,
+	)
+}
+
+type ownedDependencySet interface {
+	dependencySet
+	Close()
+}
+
+func bootstrapAndServe(
+	ctx context.Context,
+	config config,
+	build func(context.Context, foundation.Config) (ownedDependencySet, error),
+	serve func(context.Context, config, dependencySet) error,
+) error {
+	dependencies, err := build(ctx, config.Foundation)
+	if err != nil {
+		return err
+	}
+	defer dependencies.Close()
+	return serve(ctx, config, dependencies)
+}
+
+type dependencySet interface {
+	Check(context.Context) error
+}
+
+func serveWithDependencies(ctx context.Context, config config, dependencies dependencySet) error {
 	ready := &readiness{}
 	srv := newHTTPServer(config.Addr, newAPIHandler(config, ready))
 	listener, err := net.Listen("tcp", config.Addr)
@@ -321,8 +354,11 @@ func serve(ctx context.Context, config config) error {
 	}
 	limited := newLimitListener(listener, maxConnections)
 	ready.Set(true)
+	log.Printf("listening on %s", listener.Addr())
 
 	errCh := make(chan error, 1)
+	monitorCtx, stopMonitor := context.WithCancel(ctx)
+	defer stopMonitor()
 	go func() {
 		var err error
 		if config.TLSCertFile != "" || config.TLSKeyFile != "" {
@@ -339,21 +375,57 @@ func serve(ctx context.Context, config config) error {
 		}
 		errCh <- err
 	}()
+	go monitorDependencies(monitorCtx, config.Foundation.Database, dependencies, ready)
 
 	select {
 	case err := <-errCh:
 		ready.Set(false)
-		return err
+		shutdownErr := shutdownServer(srv)
+		if err != nil {
+			return err
+		}
+		return shutdownErr
 	case <-ctx.Done():
 		ready.Set(false)
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			_ = srv.Close()
+		if err := shutdownServer(srv); err != nil {
 			return err
 		}
 		return <-errCh
 	}
+}
+
+func monitorDependencies(
+	ctx context.Context,
+	config foundation.DatabaseConfig,
+	dependencies dependencySet,
+	ready *readiness,
+) {
+	ticker := time.NewTicker(config.HealthCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			checkCtx, cancel := context.WithTimeout(ctx, config.ConnectTimeout)
+			err := dependencies.Check(checkCtx)
+			cancel()
+			if ctx.Err() != nil {
+				return
+			}
+			ready.Set(err == nil)
+		}
+	}
+}
+
+func shutdownServer(server *http.Server) error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		_ = server.Close()
+		return err
+	}
+	return nil
 }
 
 type limitListener struct {

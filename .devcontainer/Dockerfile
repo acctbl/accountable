@@ -75,6 +75,7 @@ RUN apt-get update \
 		xfonts-utils \
 		xserver-common \
 		xvfb \
+		postgresql \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \

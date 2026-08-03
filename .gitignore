@@ -36,6 +36,7 @@ apps/web/public/swe-worker*
 .pnpm-debug.log*
 
 .scratch/
+.local/
 .security/allowlists/
 dist/sbom*.json
 

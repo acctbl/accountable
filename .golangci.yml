@@ -86,6 +86,16 @@ linters:
               desc: use manual constructor injection
             - pkg: github.com/facebookgo/inject
               desc: use manual constructor injection
+        no-api-migrations:
+          files:
+            - "**/cmd/api/**/*.go"
+          deny:
+            - pkg: github.com/pressly/goose
+              desc: API startup must never run migrations
+            - pkg: github.com/acctbl/accountable/internal/migration
+              desc: migrations run only through cmd/migrate
+            - pkg: github.com/acctbl/accountable/db
+              desc: migrations run only through cmd/migrate
         no-transport-in-domain:
           files:
             # gobwas/glob: **/domain/**/*.go does not match files directly in domain/.
@@ -128,6 +138,8 @@ linters:
           msg: construct http.Server with explicit limits; do not use http.Serve
         - pattern: ^time\.Now$
           msg: use an injected Clock; wall-clock reads belong in the platform clock adapter
+        - pattern: ^os\.Getenv$
+          msg: runtime configuration and secret values come from the immutable config and secret resolver, not environment variables
         - pattern: ^timestamppb\.Now$
           msg: use timestamppb.New(clock.Now()); timestamppb.Now captures nanoseconds
   exclusions:
@@ -146,6 +158,10 @@ linters:
           - forbidigo
       - path: _test\.go
         text: timestamppb\.Now
+        linters:
+          - forbidigo
+      - path: _test\.go
+        text: os\.Getenv
         linters:
           - forbidigo
 

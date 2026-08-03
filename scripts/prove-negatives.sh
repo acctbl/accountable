@@ -87,7 +87,7 @@ rm -f "$BAD_TSPB_NOW"
 echo "==> negative: invalid migration"
 BAD_MIGRATION="db/migrations/99999_bad.sql"
 cp "testdata/negative/migrate/00001_bad.sql" "$BAD_MIGRATION"
-prove invalid-migration task migrate
+prove invalid-migration task migrations:check
 
 echo "==> negative: missing translation"
 AR="apps/web/src/i18n/messages/ar.json"

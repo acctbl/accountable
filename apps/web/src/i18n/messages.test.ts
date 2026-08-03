@@ -85,7 +85,9 @@ describe("arabic catalog", () => {
 	it("renders arabic rather than the english source", () => {
 		const intl = intlFor("ar", toMessages(arSource));
 
-		expect(intl.formatMessage({ id: "home.title" })).toBe("المشروع جاهز!");
+		expect(intl.formatMessage({ id: "home.description" })).toBe(
+			"واجهة النقل المحلية",
+		);
 	});
 });
 

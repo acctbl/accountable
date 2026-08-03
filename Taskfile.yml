@@ -15,9 +15,9 @@ tasks:
       - pnpm install --frozen-lockfile
       - |
         if [ -n "${CI:-}" ] && [ -z "${PLAYWRIGHT_OS_DEPS_INSTALLED:-}" ]; then
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium firefox webkit
         else
-          pnpm exec playwright install chromium
+          pnpm exec playwright install chromium firefox webkit
         fi
 
   generate:
@@ -25,6 +25,25 @@ tasks:
     cmds:
       - buf generate
       - pnpm --filter @accountable/web generate-routes
+
+  proto:breaking:
+    desc: Check protobuf compatibility against the configured development baseline
+    cmds:
+      - |
+        against="${BUF_BREAKING_AGAINST:-.git#ref=origin/develop}"
+        if ! git show-ref --verify --quiet refs/remotes/origin/develop && [ -z "${BUF_BREAKING_AGAINST:-}" ]; then
+          against='.git#ref=HEAD'
+        fi
+        baseline_dir="$(mktemp -d)"
+        baseline_image="$baseline_dir/baseline.binpb"
+        trap 'rm -f "$baseline_image"; rmdir "$baseline_dir"' EXIT
+        # LocalizedError is an explicitly removed obsolete contract. Exclude it
+        # from the historical image so all other present and future deletions
+        # remain subject to the normal FILE-level breaking check.
+        buf build "$against" \
+          --exclude-path proto/accountable/type/v1/localized_error.proto \
+          --output "$baseline_image"
+        buf breaking --against "$baseline_image"
 
   format:
     desc: Check formatting (Go + Biome)
@@ -64,6 +83,7 @@ tasks:
           echo "$untracked" >&2
           exit 1
         fi
+      - task: proto:breaking
 
   compile:
     desc: Compile Go and TypeScript
@@ -83,10 +103,10 @@ tasks:
       - pnpm -r --if-present test:component
 
   test:integration:
-    desc: Run the integration-test skeleton
+    desc: Run integration tests in every Go package and Playwright
     cmds:
-      - go test -race ./internal/server -run Integration
-      - pnpm exec playwright test tests/integration --project=chromium
+      - go test -race ./... -run Integration
+      - pnpm exec playwright test tests/integration
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only
@@ -114,7 +134,7 @@ tasks:
   a11y:
     desc: Run accessibility checks
     cmds:
-      - pnpm exec playwright test tests/a11y/web.spec.ts --project=chromium
+      - pnpm exec playwright test tests/a11y/web.spec.ts
 
   check:
     desc: Full mechanical gate set

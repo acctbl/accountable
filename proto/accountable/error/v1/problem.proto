@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package accountable.error.v1;
+
+import "google/protobuf/duration.proto";
+
+message ProblemDetail {
+  string code = 1;
+  string message_key = 2;
+  string problem_id = 3;
+  string request_id = 4;
+  repeated FieldViolation field_violations = 5;
+  google.protobuf.Duration retry_after = 6;
+}
+
+message FieldViolation {
+  string field_path = 1;
+  string code = 2;
+}

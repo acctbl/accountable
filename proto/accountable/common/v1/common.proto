@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package accountable.common.v1;
+
+enum ScopeKind {
+  SCOPE_KIND_UNSPECIFIED = 0;
+  SCOPE_KIND_PLATFORM = 1;
+  SCOPE_KIND_WORKSPACE = 2;
+  SCOPE_KIND_ENTITY = 3;
+  SCOPE_KIND_BILLING_ACCOUNT = 4;
+  SCOPE_KIND_PERSON = 5;
+}
+
+message ScopeRef {
+  ScopeKind kind = 1;
+  string id = 2;
+}
+
+message ResourceRef {
+  string module = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  optional uint64 version = 4;
+}
+
+message CommandControl {
+  string idempotency_key = 1;
+  optional string version_etag = 2;
+}

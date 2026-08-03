@@ -77,6 +77,13 @@ RUN apt-get update \
 		xvfb \
 	&& rm -rf /var/lib/apt/lists/*
 
+RUN apt-get update \
+	&& apt-get install --yes --no-install-recommends nodejs npm \
+	&& npx --yes playwright@1.61.1 install-deps \
+	&& apt-get purge --yes nodejs npm \
+	&& apt-get autoremove --yes \
+	&& rm -rf /var/lib/apt/lists/* /root/.npm
+
 RUN case "${TARGETARCH}" in \
 		amd64) mise_arch=x64; mise_sha256=c906aa3e764f6a693beb4005d9a89edde7b4edb60d0733bbdccbbcee3b982081 ;; \
 		arm64) mise_arch=arm64; mise_sha256=e3b767a80b2c37ae3fe6d06fcd463ee28a636565d43cdbfd6e578c66f308239e ;; \

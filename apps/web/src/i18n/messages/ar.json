@@ -1,26 +1,41 @@
 {
+  "errors.deadlineExceeded": {
+    "defaultMessage": "استغرق الطلب وقتًا طويلًا جدًا لإكماله."
+  },
+  "errors.internal": {
+    "defaultMessage": "تعذّر على واجهة API إكمال الطلب."
+  },
+  "errors.invalidInput": {
+    "defaultMessage": "إدخال اختبار البنية غير صالح."
+  },
+  "errors.unavailable": {
+    "defaultMessage": "واجهة API غير متاحة مؤقتًا."
+  },
   "errors.unknown": {
     "defaultMessage": "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
   },
-  "home.buttonLabel": {
-    "defaultMessage": "زر"
-  },
-  "home.runtimeConnected": {
-    "defaultMessage": "متصل ({releaseId})"
-  },
-  "home.runtimeLoading": {
-    "defaultMessage": "جارٍ الاتصال…"
-  },
-  "home.themeHint": {
-    "defaultMessage": "(اضغط <key>d</key> للتبديل بين الداكن والفاتح والنظام)"
-  },
-  "home.title": {
-    "defaultMessage": "المشروع جاهز!"
+  "home.description": {
+    "defaultMessage": "واجهة النقل المحلية"
   },
   "localeSwitcher.label": {
     "defaultMessage": "اللغة"
   },
   "localeSwitcher.loadError": {
     "defaultMessage": "تعذّر تحميل هذه اللغة. يُرجى المحاولة مرة أخرى."
+  },
+  "runtime.connected": {
+    "defaultMessage": "متصل ({releaseId})"
+  },
+  "runtime.loading": {
+    "defaultMessage": "جارٍ الاتصال بواجهة API المحلية…"
+  },
+  "shell.boundary.message": {
+    "defaultMessage": "أعد تحميل الصفحة للمحاولة مرة أخرى. لم تُعرض أي تفاصيل تشخيصية."
+  },
+  "shell.boundary.title": {
+    "defaultMessage": "تعذّر بدء الواجهة"
+  },
+  "shell.reload": {
+    "defaultMessage": "إعادة التحميل"
   }
 }

@@ -8,8 +8,33 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: 2026.7.13
+
+      - name: Install formatting dependencies
+        run: |
+          mise trust mise.toml
+          mise exec -- mise install --locked
+          mise exec -- pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check formatting
+        run: mise exec -- task format:check
+
   verify:
+    needs: format
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository

@@ -4,6 +4,9 @@ packages:
 
 blockExoticSubdeps: true
 minimumReleaseAge: 10080 # 7 days
+minimumReleaseAgeExclude:
+  - brace-expansion
+  - fast-uri
 trustPolicy: no-downgrade
 
 catalog:
@@ -29,4 +32,8 @@ catalog:
   vitest: ^4.1.10
 
 overrides:
+  brace-expansion: 5.0.9
   semver: ^7.7.3
+  fast-uri: ^3.1.5
+  "@hono/node-server": ^1.19.17
+  ip-address: ^10.2.1

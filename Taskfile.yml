@@ -11,14 +11,20 @@ tasks:
   setup:
     desc: Install the exact tools and JavaScript packages for this repository
     cmds:
+      - git config --local core.hooksPath .githooks
       - mise install --locked
       - pnpm install --frozen-lockfile
       - |
         if [ -n "${CI:-}" ] && [ -z "${PLAYWRIGHT_OS_DEPS_INSTALLED:-}" ]; then
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium firefox webkit
         else
-          pnpm exec playwright install chromium
+          pnpm exec playwright install chromium firefox webkit
         fi
+
+  api:dev:
+    desc: Run the API with the explicit local-development configuration
+    cmds:
+      - go run ./cmd/api --config "{{.ROOT_DIR}}/config/development/api.toml"
 
   generate:
     desc: Regenerate versioned code
@@ -27,12 +33,26 @@ tasks:
       - pnpm --filter @accountable/web generate-routes
 
   format:
+    desc: Apply Go and Biome formatting
+    cmds:
+      - gofmt -w cmd internal
+      - goimports -w cmd internal
+      - pnpm format
+
+  format:check:
     desc: Check formatting (Go + Biome)
     cmds:
       - |
         unformatted="$(gofmt -l cmd internal)"
         if [ -n "$unformatted" ]; then
           echo "gofmt needed on:" >&2
+          echo "$unformatted" >&2
+          exit 1
+        fi
+      - |
+        unformatted="$(goimports -l cmd internal)"
+        if [ -n "$unformatted" ]; then
+          echo "goimports needed on:" >&2
           echo "$unformatted" >&2
           exit 1
         fi
@@ -46,15 +66,37 @@ tasks:
       - pnpm lint
 
   gen:fresh:
-    desc: Fail if generated protobuf output does not match the committed tree
-    deps: [generate]
+    desc: Fail if regenerating would change generated output
     cmds:
-      - git diff --exit-code -- gen packages/proto/src apps/web/src/routeTree.gen.ts
       - |
-        untracked="$(git ls-files --others --exclude-standard -- gen packages/proto/src)"
-        if [ -n "$untracked" ]; then
-          echo "generated output has untracked files; commit them:" >&2
-          echo "$untracked" >&2
+        set -euo pipefail
+        paths=(gen packages/proto/src apps/web/src/routeTree.gen.ts)
+        snapshot="$(mktemp -d "${TMPDIR:-/tmp}/accountable-gen-fresh.XXXXXX")"
+        cleanup() { rm -rf "$snapshot"; }
+        trap cleanup EXIT
+
+        for path in "${paths[@]}"; do
+          if [ -e "$path" ]; then
+            mkdir -p "$snapshot/$(dirname "$path")"
+            cp -a "$path" "$snapshot/$path"
+          fi
+        done
+
+        task generate
+
+        status=0
+        : >"$snapshot/diff"
+        for path in "${paths[@]}"; do
+          if [ -e "$snapshot/$path" ] || [ -e "$path" ]; then
+            if ! diff -ru "$snapshot/$path" "$path" >>"$snapshot/diff" 2>&1; then
+              status=1
+            fi
+          fi
+        done
+
+        if [ "$status" -ne 0 ]; then
+          echo "generated output was stale; regenerate and commit the result:" >&2
+          cat "$snapshot/diff" >&2
           exit 1
         fi
 
@@ -76,10 +118,10 @@ tasks:
       - pnpm -r --if-present test:component
 
   test:integration:
-    desc: Run the integration-test skeleton
+    desc: Run integration tests in every Go package and Playwright
     cmds:
-      - go test -race ./internal/server -run Integration
-      - pnpm exec playwright test tests/integration --project=chromium
+      - go test -race ./... -run Integration
+      - pnpm exec playwright test tests/integration
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only
@@ -107,12 +149,12 @@ tasks:
   a11y:
     desc: Run accessibility checks
     cmds:
-      - pnpm exec playwright test tests/a11y/web.spec.ts --project=chromium
+      - pnpm exec playwright test tests/a11y/web.spec.ts
 
   check:
     desc: Full mechanical gate set
     cmds:
-      - task: format
+      - task: format:check
       - task: lint
       - task: gen:fresh
       - task: compile

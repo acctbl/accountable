@@ -1,19 +1,26 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
-	"net/http"
-
-	"github.com/acctbl/accountable/gen/go/accountable/system/v1/systemv1connect"
-	"github.com/acctbl/accountable/internal/server"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	mux := http.NewServeMux()
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
 
-	path, handler := systemv1connect.NewSystemServiceHandler(&server.SystemServer{})
-	mux.Handle(path, handler)
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	const addr = ":8080"
+	log.Printf("listening on %s", addr)
+	return serve(ctx, addr)
 }

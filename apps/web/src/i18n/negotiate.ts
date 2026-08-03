@@ -87,7 +87,7 @@ export function negotiate(search = window.location.search): Locale {
 
 function writePreferenceCookie(name: string, locale: Locale) {
 	// biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is async; preference reads need a synchronous value before first paint.
-	document.cookie = `${name}=${encodeURIComponent(locale)}; path=/; max-age=${LOCALE_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+	document.cookie = `${name}=${encodeURIComponent(locale)}; path=/; max-age=${LOCALE_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax; Secure`;
 }
 
 export function writeLocaleCookie(locale: Locale) {

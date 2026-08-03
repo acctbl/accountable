@@ -36,6 +36,13 @@ tasks:
           echo "$unformatted" >&2
           exit 1
         fi
+      - |
+        unformatted="$(goimports -l cmd internal)"
+        if [ -n "$unformatted" ]; then
+          echo "goimports needed on:" >&2
+          echo "$unformatted" >&2
+          exit 1
+        fi
       - pnpm format:check
 
   lint:

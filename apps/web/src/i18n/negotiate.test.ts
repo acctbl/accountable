@@ -110,7 +110,7 @@ describe("negotiate", () => {
 });
 
 describe("writeLocaleCookie", () => {
-	it("writes a year-long site-wide cookie", () => {
+	it("writes a year-long site-wide Secure cookie", () => {
 		const written: string[] = [];
 		Object.defineProperty(document, "cookie", {
 			configurable: true,
@@ -126,6 +126,7 @@ describe("writeLocaleCookie", () => {
 		expect(written[0]).toContain("path=/");
 		expect(written[0]).toContain("max-age=31536000");
 		expect(written[0]).toContain("SameSite=Lax");
+		expect(written[0]).toContain("Secure");
 	});
 });
 

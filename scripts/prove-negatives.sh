@@ -52,6 +52,38 @@ echo "==> negative: prohibited import"
 BAD_IMPORT="internal/apierror/z_negative_import.go"
 cp "testdata/negative/arch/bad_import.go" "$BAD_IMPORT"
 prove prohibited-import task lint
+rm -f "$BAD_IMPORT"
+
+echo "==> negative: http.ListenAndServe"
+BAD_LISTEN="internal/server/z_negative_listen.go"
+cp "testdata/negative/arch/bad_listen_and_serve.go" "$BAD_LISTEN"
+prove forbidden-listen-and-serve task lint
+rm -f "$BAD_LISTEN"
+
+echo "==> negative: float64"
+BAD_FLOAT="internal/server/z_negative_float.go"
+cp "testdata/negative/arch/bad_float.go" "$BAD_FLOAT"
+prove forbidden-float task lint
+rm -f "$BAD_FLOAT"
+
+echo "==> negative: domain imports net/http"
+BAD_DOMAIN_DIR="internal/modules/negativetest/domain"
+mkdir -p "$BAD_DOMAIN_DIR"
+cp "testdata/negative/arch/bad_domain_http_import.go" "$BAD_DOMAIN_DIR/z_negative_http.go"
+prove domain-http-import task lint
+rm -rf "internal/modules/negativetest"
+
+echo "==> negative: time.Now outside clock adapter"
+BAD_TIME_NOW="internal/server/z_negative_time_now.go"
+cp "testdata/negative/arch/bad_time_now.go" "$BAD_TIME_NOW"
+prove forbidden-time-now task lint
+rm -f "$BAD_TIME_NOW"
+
+echo "==> negative: timestamppb.Now"
+BAD_TSPB_NOW="internal/server/z_negative_timestamppb_now.go"
+cp "testdata/negative/arch/bad_timestamppb_now.go" "$BAD_TSPB_NOW"
+prove forbidden-timestamppb-now task lint
+rm -f "$BAD_TSPB_NOW"
 
 echo "==> negative: invalid migration"
 BAD_MIGRATION="db/migrations/99999_bad.sql"

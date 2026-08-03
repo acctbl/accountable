@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package accountable.probe.v1;
+
+import "google/protobuf/duration.proto";
+
+service ArchitectureProbeService {
+  rpc Correlate(CorrelateRequest) returns (CorrelateResponse);
+  rpc CookieRoundTrip(CookieRoundTripRequest) returns (CookieRoundTripResponse);
+  rpc Fail(FailRequest) returns (FailResponse);
+  rpc Wait(WaitRequest) returns (WaitResponse);
+  rpc Stream(StreamRequest) returns (stream StreamResponse);
+}
+
+message CorrelateRequest {}
+
+message CorrelateResponse {
+  string request_id = 1;
+  string trace_id = 2;
+}
+
+message CookieRoundTripRequest {
+  bool set_cookie = 1;
+}
+
+message CookieRoundTripResponse {
+  bool cookie_received = 1;
+  string request_id = 2;
+  string trace_id = 3;
+}
+
+enum FailureKind {
+  FAILURE_KIND_UNSPECIFIED = 0;
+  FAILURE_KIND_INVALID_INPUT = 1;
+  FAILURE_KIND_UNAVAILABLE = 2;
+  FAILURE_KIND_INTERNAL_FAILURE = 3;
+}
+
+message FailRequest {
+  FailureKind kind = 1;
+}
+
+message FailResponse {}
+
+message WaitRequest {
+  google.protobuf.Duration delay = 1;
+}
+
+message WaitResponse {
+  string request_id = 1;
+  string trace_id = 2;
+}
+
+message StreamRequest {
+  uint32 count = 1;
+  google.protobuf.Duration interval = 2;
+}
+
+message StreamResponse {
+  uint32 sequence = 1;
+  string request_id = 2;
+  string trace_id = 3;
+}

@@ -22,6 +22,30 @@ function localeBootstrap(includePseudoLocales: boolean): Plugin {
 	};
 }
 
+function developmentRuntimeConfig(): Plugin {
+	const body = JSON.stringify({
+		schema_version: 1,
+		api_base_url: "http://localhost:8080",
+		architecture_probe: false,
+		configuration_revision: "local-development",
+	});
+	const serveConfig = (
+		_request: unknown,
+		response: import("node:http").ServerResponse,
+	) => {
+		response.statusCode = 200;
+		response.setHeader("Cache-Control", "no-store");
+		response.setHeader("Content-Type", "application/json; charset=utf-8");
+		response.end(body);
+	};
+	return {
+		name: "accountable:runtime-config",
+		configureServer(server) {
+			server.middlewares.use("/_runtime/config.json", serveConfig);
+		},
+	};
+}
+
 const config = defineConfig(({ command }) => {
 	const includePseudoLocales = command === "serve";
 
@@ -35,11 +59,13 @@ const config = defineConfig(({ command }) => {
 			},
 		},
 		plugins: [
+			developmentRuntimeConfig(),
 			localeBootstrap(includePseudoLocales),
 			tailwindcss(),
 			tanstackRouter({ target: "react", autoCodeSplitting: true }),
 			viteReact(),
 			serwist({
+				disable: command === "serve",
 				swSrc: "src/sw.ts",
 				swDest: "sw.js",
 				globDirectory: "dist",

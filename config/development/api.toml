@@ -1,0 +1,7 @@
+environment = "development"
+listen_address = "127.0.0.1:8080"
+architecture_probe = true
+allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+trusted_proxy_cidrs = []
+unary_rpc_timeout = "10s"
+stream_rpc_timeout = "25s"

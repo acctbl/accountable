@@ -4,6 +4,8 @@ linters:
   default: standard
   enable:
     - depguard
+    - forbidigo
+    - gochecknoinits
   settings:
     depguard:
       rules:
@@ -27,7 +29,127 @@ linters:
           deny:
             - pkg: github.com/acctbl/accountable/internal/testforbidden
               desc: do not import internal/testforbidden
+        no-foundation-ref:
+          files:
+            - "$all"
+            - "!**/internal/modules/foundation_ref/**"
+            - "!**/testdata/**"
+          deny:
+            - pkg: github.com/acctbl/accountable/internal/modules/foundation_ref
+              desc: foundation_ref is a synthetic proof module; never import it
+        no-direct-apd:
+          files:
+            - "$all"
+            - "!**/internal/platform/money/**"
+            - "!**/testdata/**"
+          deny:
+            - pkg: github.com/cockroachdb/apd
+              desc: use Accountable Money/Decimal types; direct apd bypasses rounding traps
+        no-alt-loggers:
+          files:
+            - "$all"
+            - "!**/testdata/**"
+          deny:
+            - pkg: go.uber.org/zap
+              desc: log via log/slog through the telemetry boundary
+            - pkg: github.com/sirupsen/logrus
+              desc: log via log/slog through the telemetry boundary
+            - pkg: github.com/rs/zerolog
+              desc: log via log/slog through the telemetry boundary
+            - pkg: github.com/hashicorp/go-hclog
+              desc: log via log/slog through the telemetry boundary
+        no-orm:
+          files:
+            - "$all"
+            - "!**/testdata/**"
+          deny:
+            - pkg: gorm.io/gorm
+              desc: use hand-written SQL through pgx and sqlc
+            - pkg: entgo.io/ent
+              desc: use hand-written SQL through pgx and sqlc
+            - pkg: github.com/jmoiron/sqlx
+              desc: use hand-written SQL through pgx and sqlc
+            - pkg: github.com/uptrace/bun
+              desc: use hand-written SQL through pgx and sqlc
+            - pkg: xorm.io/xorm
+              desc: use hand-written SQL through pgx and sqlc
+        no-di-framework:
+          files:
+            - "$all"
+            - "!**/testdata/**"
+          deny:
+            - pkg: github.com/google/wire
+              desc: use manual constructor injection
+            - pkg: go.uber.org/fx
+              desc: use manual constructor injection
+            - pkg: go.uber.org/dig
+              desc: use manual constructor injection
+            - pkg: github.com/facebookgo/inject
+              desc: use manual constructor injection
+        no-transport-in-domain:
+          files:
+            # gobwas/glob: **/domain/**/*.go does not match files directly in domain/.
+            - "**/internal/modules/**/domain/*.go"
+            - "**/internal/modules/**/domain/**/*.go"
+            - "**/internal/modules/**/application/*.go"
+            - "**/internal/modules/**/application/**/*.go"
+            - "!**/*_test.go"
+          deny:
+            - pkg: connectrpc.com/connect
+              desc: domain/application must not import connect transport
+            - pkg: net/http
+              desc: domain/application must not import HTTP transport
+            - pkg: github.com/jackc/pgx
+              desc: domain/application must not import the database driver
+            - pkg: google.golang.org/protobuf
+              desc: domain/application must not import generated transport DTOs
+            - pkg: github.com/acctbl/accountable/gen/
+              desc: domain/application must not import generated transport DTOs
+            - pkg: github.com/aws/aws-sdk-go
+              desc: domain/application must not import vendor SDKs
+            - pkg: github.com/aws/aws-sdk-go-v2
+              desc: domain/application must not import vendor SDKs
+            - pkg: github.com/twmb/franz-go
+              desc: domain/application must not import the broker client
+            - pkg: go.opentelemetry.io/otel/exporters
+              desc: domain/application must not import telemetry exporters
+            - pkg: github.com/infisical/
+              desc: domain/application must not import secret provider SDKs
+    forbidigo:
+      analyze-types: true
+      forbid:
+        # Keep float patterns first: with analyze-types, later patterns can
+        # otherwise fail to match builtin type names (forbidigo quirk).
+        - pattern: float(32|64)
+          msg: binary floating point cannot represent money exactly; use Money/Decimal
+        - pattern: ^http\.ListenAndServe$
+          msg: construct http.Server with explicit limits; do not use http.ListenAndServe
+        - pattern: ^http\.Serve$
+          msg: construct http.Server with explicit limits; do not use http.Serve
+        - pattern: ^time\.Now$
+          msg: use an injected Clock; wall-clock reads belong in the platform clock adapter
+        - pattern: ^timestamppb\.Now$
+          msg: use timestamppb.New(clock.Now()); timestamppb.Now captures nanoseconds
+  exclusions:
+    rules:
+      - path: (.*/)?internal/platform/clock/
+        text: time\.Now
+        linters:
+          - forbidigo
+      - path: _test\.go
+        text: time\.Now
+        linters:
+          - forbidigo
+      - path: _test\.go
+        text: 'use of `float(32|64)`'
+        linters:
+          - forbidigo
+      - path: _test\.go
+        text: timestamppb\.Now
+        linters:
+          - forbidigo
 
 formatters:
   enable:
     - gofmt
+    - goimports

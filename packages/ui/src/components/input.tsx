@@ -7,7 +7,7 @@ function Input({ className, dir = "auto", ...props }: InputPrimitive.Props) {
 			data-slot="input"
 			dir={dir}
 			className={cn(
-				"flex h-7 w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-1 text-xs/relaxed transition-[color,box-shadow] outline-none",
+				"flex h-7 w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-1 text-base/relaxed transition-[color,box-shadow] outline-none xl:text-xs/relaxed",
 				"placeholder:text-muted-foreground",
 				"focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
 				"disabled:pointer-events-none disabled:opacity-50",

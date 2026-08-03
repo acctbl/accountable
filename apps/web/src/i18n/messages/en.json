@@ -1,26 +1,41 @@
 {
+  "errors.deadlineExceeded": {
+    "defaultMessage": "The request took too long to complete."
+  },
+  "errors.internal": {
+    "defaultMessage": "The API could not complete the request."
+  },
+  "errors.invalidInput": {
+    "defaultMessage": "The probe input was not valid."
+  },
+  "errors.unavailable": {
+    "defaultMessage": "The API is temporarily unavailable."
+  },
   "errors.unknown": {
     "defaultMessage": "Something went wrong. Please try again."
   },
-  "home.buttonLabel": {
-    "defaultMessage": "Button"
-  },
-  "home.runtimeConnected": {
-    "defaultMessage": "Connected ({releaseId})"
-  },
-  "home.runtimeLoading": {
-    "defaultMessage": "Connecting…"
-  },
-  "home.themeHint": {
-    "defaultMessage": "(Press <key>d</key> to cycle dark / light / system)"
-  },
-  "home.title": {
-    "defaultMessage": "Project ready!"
+  "home.description": {
+    "defaultMessage": "Local transport shell"
   },
   "localeSwitcher.label": {
     "defaultMessage": "Language"
   },
   "localeSwitcher.loadError": {
     "defaultMessage": "That language could not be loaded. Please try again."
+  },
+  "runtime.connected": {
+    "defaultMessage": "Connected ({releaseId})"
+  },
+  "runtime.loading": {
+    "defaultMessage": "Connecting to the local API…"
+  },
+  "shell.boundary.message": {
+    "defaultMessage": "Reload the page to try again. No diagnostic details have been displayed."
+  },
+  "shell.boundary.title": {
+    "defaultMessage": "The shell could not start"
+  },
+  "shell.reload": {
+    "defaultMessage": "Reload"
   }
 }

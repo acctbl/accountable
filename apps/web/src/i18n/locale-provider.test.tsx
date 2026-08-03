@@ -40,7 +40,10 @@ function Subject({ controls = false }: { controls?: boolean }) {
 			onError={() => {}}
 		>
 			<h1>
-				<FormattedMessage id="home.title" defaultMessage="Project ready!" />
+				<FormattedMessage
+					id="home.description"
+					defaultMessage="Local transport shell"
+				/>
 			</h1>
 			<output data-testid="locale">{locale}</output>
 			<output data-testid="formatting-locale">{formattingLocale}</output>
@@ -108,7 +111,7 @@ describe("LocaleProvider", () => {
 	it("renders the negotiated catalog and direction on its first render", async () => {
 		await renderAt("?lang=ar");
 
-		expect(screen.getByRole("heading").textContent).toBe("المشروع جاهز!");
+		expect(screen.getByRole("heading").textContent).toBe("واجهة النقل المحلية");
 		expect(document.documentElement.lang).toBe("ar");
 		expect(document.documentElement.dir).toBe("rtl");
 	});
@@ -116,7 +119,9 @@ describe("LocaleProvider", () => {
 	it("renders regional english with the source catalog", async () => {
 		await renderAt("?lang=en-GB");
 
-		expect(screen.getByRole("heading").textContent).toBe("Project ready!");
+		expect(screen.getByRole("heading").textContent).toBe(
+			"Local transport shell",
+		);
 		expect(document.documentElement.lang).toBe("en-GB");
 		expect(document.documentElement.dir).toBe("ltr");
 	});
@@ -157,7 +162,9 @@ describe("LocaleProvider", () => {
 
 		expect(screen.getByTestId("locale").textContent).toBe("en-US");
 		expect(screen.getByTestId("pending").textContent).toBe("ar");
-		expect(screen.getByRole("heading").textContent).toBe("Project ready!");
+		expect(screen.getByRole("heading").textContent).toBe(
+			"Local transport shell",
+		);
 
 		await act(async () => {
 			resolveBundle(arabicBundle);
@@ -166,7 +173,7 @@ describe("LocaleProvider", () => {
 
 		expect(screen.getByTestId("locale").textContent).toBe("ar");
 		expect(screen.getByTestId("pending").textContent).toBe("");
-		expect(screen.getByRole("heading").textContent).toBe("المشروع جاهز!");
+		expect(screen.getByRole("heading").textContent).toBe("واجهة النقل المحلية");
 	});
 
 	it("keeps the active bundle on failure and allows retry", async () => {
@@ -188,7 +195,9 @@ describe("LocaleProvider", () => {
 			expect(screen.getByTestId("error").textContent).toBe("chunk unavailable");
 		});
 		expect(screen.getByTestId("locale").textContent).toBe("en-US");
-		expect(screen.getByRole("heading").textContent).toBe("Project ready!");
+		expect(screen.getByRole("heading").textContent).toBe(
+			"Local transport shell",
+		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Arabic" }));
 		await waitFor(() => {
@@ -225,7 +234,7 @@ describe("LocaleProvider", () => {
 		};
 		renderWithLoader(initialState, loadLocaleBundle);
 
-		expect(screen.getByRole("heading").textContent).toBe("المشروع جاهز!");
+		expect(screen.getByRole("heading").textContent).toBe("واجهة النقل المحلية");
 		expect(screen.getByTestId("locale").textContent).toBe("ar");
 		expect(screen.getByTestId("formatting-locale").textContent).toBe("en-US");
 		expect(screen.getByTestId("formatted-list").textContent).toBe(

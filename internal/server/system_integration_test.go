@@ -27,6 +27,7 @@ func TestSystemServiceGetRuntimeIntegration(t *testing.T) {
 	mux := http.NewServeMux()
 	path, handler := systemv1connect.NewSystemServiceHandler(
 		server.NewSystemServer(clock.Fixed{Instant: want}),
+		connect.WithInterceptors(server.BoundaryInterceptor{}),
 	)
 	mux.Handle(path, handler)
 

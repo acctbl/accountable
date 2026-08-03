@@ -95,7 +95,12 @@ node -e '
 const fs = require("node:fs");
 const path = process.argv[1];
 const catalog = JSON.parse(fs.readFileSync(path, "utf8"));
-delete catalog["home.title"];
+const key = "home.description";
+if (!(key in catalog)) {
+  console.error(`negative fixture stale: ${path} has no ${key}`);
+  process.exit(2);
+}
+delete catalog[key];
 fs.writeFileSync(path, JSON.stringify(catalog, null, 2) + "\n");
 ' "$AR"
 prove missing-translation task i18n
@@ -105,12 +110,19 @@ PAGE="apps/web/src/routes/index.tsx"
 node -e '
 const fs = require("node:fs");
 const path = process.argv[1];
-let source = fs.readFileSync(path, "utf8");
-source = source.replace(
-  "<h1 className=\"font-medium\">",
-  "<img src=\"/favicon.svg\" />\\n\\t\\t\\t\\t\\t<h1 className=\"font-medium\">",
+const source = fs.readFileSync(path, "utf8");
+const needle = "<LocaleSwitcher />";
+if (!source.includes(needle)) {
+  console.error(`negative fixture stale: ${path} has no ${JSON.stringify(needle)}`);
+  process.exit(2);
+}
+fs.writeFileSync(
+  path,
+  source.replace(
+    needle,
+    "<img src=\"/favicon.svg\" />\\n\\t\\t\\t\\t" + needle,
+  ),
 );
-fs.writeFileSync(path, source);
 ' "$PAGE"
 prove accessibility-defect env CI=1 task a11y
 

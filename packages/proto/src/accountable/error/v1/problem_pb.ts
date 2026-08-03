@@ -15,10 +15,6 @@ export const file_accountable_error_v1_problem: GenFile = /*@__PURE__*/
   fileDesc("CiJhY2NvdW50YWJsZS9lcnJvci92MS9wcm9ibGVtLnByb3RvEhRhY2NvdW50YWJsZS5lcnJvci52MSLKAQoNUHJvYmxlbURldGFpbBIMCgRjb2RlGAEgASgJEhMKC21lc3NhZ2Vfa2V5GAIgASgJEhIKCnByb2JsZW1faWQYAyABKAkSEgoKcmVxdWVzdF9pZBgEIAEoCRI+ChBmaWVsZF92aW9sYXRpb25zGAUgAygLMiQuYWNjb3VudGFibGUuZXJyb3IudjEuRmllbGRWaW9sYXRpb24SLgoLcmV0cnlfYWZ0ZXIYBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iMgoORmllbGRWaW9sYXRpb24SEgoKZmllbGRfcGF0aBgBIAEoCRIMCgRjb2RlGAIgASgJQt8BChhjb20uYWNjb3VudGFibGUuZXJyb3IudjFCDFByb2JsZW1Qcm90b1ABWkFnaXRodWIuY29tL2FjY3RibC9hY2NvdW50YWJsZS9nZW4vZ28vYWNjb3VudGFibGUvZXJyb3IvdjE7ZXJyb3J2MaICA0FFWKoCFEFjY291bnRhYmxlLkVycm9yLlYxygIVQWNjb3VudGFibGVcRXJyb3JfXFYx4gIhQWNjb3VudGFibGVcRXJyb3JfXFYxXEdQQk1ldGFkYXRh6gIWQWNjb3VudGFibGU6OkVycm9yOjpWMWIGcHJvdG8z", [file_google_protobuf_duration]);
 
 /**
- * ProblemDetail is the only structured error detail exposed by the API.
- * message_key selects client-owned copy; it never contains user data or
- * server-authored English. Field violations carry stable machine codes.
- *
  * @generated from message accountable.error.v1.ProblemDetail
  */
 export type ProblemDetail = Message<"accountable.error.v1.ProblemDetail"> & {

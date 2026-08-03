@@ -10,11 +10,9 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file accountable/common/v1/common.proto.
  */
 export const file_accountable_common_v1_common: GenFile = /*@__PURE__*/
-  fileDesc("CiJhY2NvdW50YWJsZS9jb21tb24vdjEvY29tbW9uLnByb3RvEhVhY2NvdW50YWJsZS5jb21tb24udjEiTAoIU2NvcGVSZWYSLgoEa2luZBgBIAEoDjIgLmFjY291bnRhYmxlLmNvbW1vbi52MS5TY29wZUtpbmQSEAoIc2NvcGVfaWQYAiABKAkiaQoLUmVzb3VyY2VSZWYSLgoFc2NvcGUYASABKAsyHy5hY2NvdW50YWJsZS5jb21tb24udjEuU2NvcGVSZWYSFQoNcmVzb3VyY2VfdHlwZRgCIAEoCRITCgtyZXNvdXJjZV9pZBgDIAEoCSJVCg5Db21tYW5kQ29udHJvbBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSGQoMdmVyc2lvbl9ldGFnGAIgASgJSACIAQFCDwoNX3ZlcnNpb25fZXRhZypzCglTY29wZUtpbmQSGgoWU0NPUEVfS0lORF9VTlNQRUNJRklFRBAAEhsKF1NDT1BFX0tJTkRfT1JHQU5JWkFUSU9OEAESGAoUU0NPUEVfS0lORF9XT1JLU1BBQ0UQAhITCg9TQ09QRV9LSU5EX1VTRVIQA0LjAQoZY29tLmFjY291bnRhYmxlLmNvbW1vbi52MUILQ29tbW9uUHJvdG9QAVpDZ2l0aHViLmNvbS9hY2N0YmwvYWNjb3VudGFibGUvZ2VuL2dvL2FjY291bnRhYmxlL2NvbW1vbi92MTtjb21tb252MaICA0FDWKoCFUFjY291bnRhYmxlLkNvbW1vbi5WMcoCFUFjY291bnRhYmxlXENvbW1vblxWMeICIUFjY291bnRhYmxlXENvbW1vblxWMVxHUEJNZXRhZGF0YeoCF0FjY291bnRhYmxlOjpDb21tb246OlYxYgZwcm90bzM");
+  fileDesc("CiJhY2NvdW50YWJsZS9jb21tb24vdjEvY29tbW9uLnByb3RvEhVhY2NvdW50YWJsZS5jb21tb24udjEiRgoIU2NvcGVSZWYSLgoEa2luZBgBIAEoDjIgLmFjY291bnRhYmxlLmNvbW1vbi52MS5TY29wZUtpbmQSCgoCaWQYAiABKAkiawoLUmVzb3VyY2VSZWYSDgoGbW9kdWxlGAEgASgJEhUKDXJlc291cmNlX3R5cGUYAiABKAkSEwoLcmVzb3VyY2VfaWQYAyABKAkSFAoHdmVyc2lvbhgEIAEoBEgAiAEBQgoKCF92ZXJzaW9uIlUKDkNvbW1hbmRDb250cm9sEhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIZCgx2ZXJzaW9uX2V0YWcYAiABKAlIAIgBAUIPCg1fdmVyc2lvbl9ldGFnKqgBCglTY29wZUtpbmQSGgoWU0NPUEVfS0lORF9VTlNQRUNJRklFRBAAEhcKE1NDT1BFX0tJTkRfUExBVEZPUk0QARIYChRTQ09QRV9LSU5EX1dPUktTUEFDRRACEhUKEVNDT1BFX0tJTkRfRU5USVRZEAMSHgoaU0NPUEVfS0lORF9CSUxMSU5HX0FDQ09VTlQQBBIVChFTQ09QRV9LSU5EX1BFUlNPThAFQuMBChljb20uYWNjb3VudGFibGUuY29tbW9uLnYxQgtDb21tb25Qcm90b1ABWkNnaXRodWIuY29tL2FjY3RibC9hY2NvdW50YWJsZS9nZW4vZ28vYWNjb3VudGFibGUvY29tbW9uL3YxO2NvbW1vbnYxogIDQUNYqgIVQWNjb3VudGFibGUuQ29tbW9uLlYxygIVQWNjb3VudGFibGVcQ29tbW9uXFYx4gIhQWNjb3VudGFibGVcQ29tbW9uXFYxXEdQQk1ldGFkYXRh6gIXQWNjb3VudGFibGU6OkNvbW1vbjo6VjFiBnByb3RvMw");
 
 /**
- * ScopeRef is the stable, typed reference to an owning scope.
- *
  * @generated from message accountable.common.v1.ScopeRef
  */
 export type ScopeRef = Message<"accountable.common.v1.ScopeRef"> & {
@@ -24,9 +22,9 @@ export type ScopeRef = Message<"accountable.common.v1.ScopeRef"> & {
   kind: ScopeKind;
 
   /**
-   * @generated from field: string scope_id = 2;
+   * @generated from field: string id = 2;
    */
-  scopeId: string;
+  id: string;
 };
 
 /**
@@ -37,16 +35,13 @@ export const ScopeRefSchema: GenMessage<ScopeRef> = /*@__PURE__*/
   messageDesc(file_accountable_common_v1_common, 0);
 
 /**
- * ResourceRef identifies a resource without embedding a generated DTO in a
- * domain package.
- *
  * @generated from message accountable.common.v1.ResourceRef
  */
 export type ResourceRef = Message<"accountable.common.v1.ResourceRef"> & {
   /**
-   * @generated from field: accountable.common.v1.ScopeRef scope = 1;
+   * @generated from field: string module = 1;
    */
-  scope?: ScopeRef | undefined;
+  module: string;
 
   /**
    * @generated from field: string resource_type = 2;
@@ -57,6 +52,11 @@ export type ResourceRef = Message<"accountable.common.v1.ResourceRef"> & {
    * @generated from field: string resource_id = 3;
    */
   resourceId: string;
+
+  /**
+   * @generated from field: optional uint64 version = 4;
+   */
+  version?: bigint | undefined;
 };
 
 /**
@@ -67,8 +67,6 @@ export const ResourceRefSchema: GenMessage<ResourceRef> = /*@__PURE__*/
   messageDesc(file_accountable_common_v1_common, 1);
 
 /**
- * CommandControl carries transport-safe command execution controls.
- *
  * @generated from message accountable.common.v1.CommandControl
  */
 export type CommandControl = Message<"accountable.common.v1.CommandControl"> & {
@@ -91,8 +89,6 @@ export const CommandControlSchema: GenMessage<CommandControl> = /*@__PURE__*/
   messageDesc(file_accountable_common_v1_common, 2);
 
 /**
- * ScopeKind identifies the class of boundary in which a resource lives.
- *
  * @generated from enum accountable.common.v1.ScopeKind
  */
 export enum ScopeKind {
@@ -102,9 +98,9 @@ export enum ScopeKind {
   UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: SCOPE_KIND_ORGANIZATION = 1;
+   * @generated from enum value: SCOPE_KIND_PLATFORM = 1;
    */
-  ORGANIZATION = 1,
+  PLATFORM = 1,
 
   /**
    * @generated from enum value: SCOPE_KIND_WORKSPACE = 2;
@@ -112,9 +108,19 @@ export enum ScopeKind {
   WORKSPACE = 2,
 
   /**
-   * @generated from enum value: SCOPE_KIND_USER = 3;
+   * @generated from enum value: SCOPE_KIND_ENTITY = 3;
    */
-  USER = 3,
+  ENTITY = 3,
+
+  /**
+   * @generated from enum value: SCOPE_KIND_BILLING_ACCOUNT = 4;
+   */
+  BILLING_ACCOUNT = 4,
+
+  /**
+   * @generated from enum value: SCOPE_KIND_PERSON = 5;
+   */
+  PERSON = 5,
 }
 
 /**

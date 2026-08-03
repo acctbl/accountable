@@ -22,9 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ProblemDetail is the only structured error detail exposed by the API.
-// message_key selects client-owned copy; it never contains user data or
-// server-authored English. Field violations carry stable machine codes.
 type ProblemDetail struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Code            string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`

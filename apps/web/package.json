@@ -7,7 +7,7 @@
     "generate-routes": "tsr generate",
     "build": "pnpm i18n:compile && vite build",
     "preview": "vite preview",
-    "format": "biome format",
+    "format": "biome format --write .",
     "format:check": "biome check --formatter-enabled=true --linter-enabled=false --assist-enabled=false .",
     "lint": "biome lint",
     "typecheck": "pnpm i18n:compile && tsc --noEmit",

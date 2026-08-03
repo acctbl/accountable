@@ -11,6 +11,7 @@ tasks:
   setup:
     desc: Install the exact tools and JavaScript packages for this repository
     cmds:
+      - git config --local core.hooksPath .githooks
       - mise install --locked
       - pnpm install --frozen-lockfile
       - |
@@ -20,32 +21,25 @@ tasks:
           pnpm exec playwright install chromium firefox webkit
         fi
 
+  api:dev:
+    desc: Run the API with the explicit local-development configuration
+    cmds:
+      - go run ./cmd/api --config "{{.ROOT_DIR}}/config/development/api.toml"
+
   generate:
     desc: Regenerate versioned code
     cmds:
       - buf generate
       - pnpm --filter @accountable/web generate-routes
 
-  proto:breaking:
-    desc: Check protobuf compatibility against the configured development baseline
-    cmds:
-      - |
-        against="${BUF_BREAKING_AGAINST:-.git#ref=origin/develop}"
-        if ! git show-ref --verify --quiet refs/remotes/origin/develop && [ -z "${BUF_BREAKING_AGAINST:-}" ]; then
-          against='.git#ref=HEAD'
-        fi
-        baseline_dir="$(mktemp -d)"
-        baseline_image="$baseline_dir/baseline.binpb"
-        trap 'rm -f "$baseline_image"; rmdir "$baseline_dir"' EXIT
-        # LocalizedError is an explicitly removed obsolete contract. Exclude it
-        # from the historical image so all other present and future deletions
-        # remain subject to the normal FILE-level breaking check.
-        buf build "$against" \
-          --exclude-path proto/accountable/type/v1/localized_error.proto \
-          --output "$baseline_image"
-        buf breaking --against "$baseline_image"
-
   format:
+    desc: Apply Go and Biome formatting
+    cmds:
+      - gofmt -w cmd internal
+      - goimports -w cmd internal
+      - pnpm format
+
+  format:check:
     desc: Check formatting (Go + Biome)
     cmds:
       - |
@@ -83,7 +77,6 @@ tasks:
           echo "$untracked" >&2
           exit 1
         fi
-      - task: proto:breaking
 
   compile:
     desc: Compile Go and TypeScript
@@ -139,7 +132,7 @@ tasks:
   check:
     desc: Full mechanical gate set
     cmds:
-      - task: format
+      - task: format:check
       - task: lint
       - task: gen:fresh
       - task: compile

@@ -24,7 +24,7 @@ function Home() {
 	}, [runtime.data, runtime.error]);
 
 	return (
-		<main id="main-content" className="flex min-h-svh text-sm" tabIndex={-1}>
+		<main id="main-content" className="flex min-h-svh" tabIndex={-1}>
 			<div className="min-w-0 space-y-2 p-6">
 				<LocaleSwitcher />
 				<p>

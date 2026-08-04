@@ -94,6 +94,17 @@ linters:
               desc: API startup must never run migrations
             - pkg: github.com/acctbl/accountable/internal/migration
               desc: migrations run only through cmd/migrate
+        no-provider-internals-in-modules:
+          files:
+            - "**/internal/modules/**/*.go"
+            - "!**/testdata/**"
+          deny:
+            - pkg: github.com/acctbl/accountable/internal/platform/secret
+              desc: modules receive secrets only through constructor-injected capability interfaces
+            - pkg: github.com/acctbl/accountable/internal/platform/awsconfig
+              desc: modules must not construct AWS provider configuration
+            - pkg: github.com/aws/aws-sdk-go-v2
+              desc: modules receive AWS-backed capabilities only through constructor-injected interfaces
         no-transport-in-domain:
           files:
             # gobwas/glob: **/domain/**/*.go does not match files directly in domain/.

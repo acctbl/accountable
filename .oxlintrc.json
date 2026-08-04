@@ -22,7 +22,6 @@
     "testdata/**",
     "tests/**",
     "infra/**",
-    "db/**",
     "scripts/**"
   ],
   "options": {

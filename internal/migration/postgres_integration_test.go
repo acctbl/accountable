@@ -14,19 +14,23 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/acctbl/accountable/db"
-	"github.com/acctbl/accountable/internal/foundation"
+	"github.com/acctbl/accountable/internal/bootstrap"
 	"github.com/acctbl/accountable/internal/migration"
 	"github.com/acctbl/accountable/internal/platform/clock"
+	"github.com/acctbl/accountable/internal/platform/crypto"
+	platformdb "github.com/acctbl/accountable/internal/platform/database"
+	"github.com/acctbl/accountable/internal/platform/features"
+	"github.com/acctbl/accountable/internal/platform/secret"
+	"github.com/acctbl/accountable/internal/platform/storage"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type staticResolver struct{ password string }
 
-func (r staticResolver) ResolveBatch(_ context.Context, refs []foundation.SecretRef) (map[foundation.SecretRef]foundation.SecretValue, error) {
-	values := make(map[foundation.SecretRef]foundation.SecretValue, len(refs))
+func (r staticResolver) ResolveBatch(_ context.Context, refs []secret.Ref) (map[secret.Ref]secret.SecretValue, error) {
+	values := make(map[secret.Ref]secret.SecretValue, len(refs))
 	for _, ref := range refs {
-		values[ref] = foundation.NewSecretValue([]byte(r.password))
+		values[ref] = secret.NewSecretValue([]byte(r.password))
 	}
 	return values, nil
 }
@@ -56,8 +60,8 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	defer reset()
 
 	databaseConfig, password := databaseConfigFromDSN(t, dsn)
-	opened, err := foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
-	if !errors.Is(err, foundation.ErrSchemaBehind) || opened != nil {
+	opened, err := platformdb.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
+	if !errors.Is(err, platformdb.ErrSchemaBehind) || opened != nil {
 		t.Fatalf("empty database open = (%v, %v), want schema behind", opened, err)
 	}
 	var stateTableExists bool
@@ -71,7 +75,7 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	if _, err := database.ExecContext(ctx, `SET TIME ZONE 'Europe/London'`); err != nil {
 		t.Fatalf("seed non-UTC migration session: %v", err)
 	}
-	if err := migration.Run(ctx, database, db.Migrations()); err != nil {
+	if err := migration.Run(ctx, database, migration.Catalogue()...); err != nil {
 		t.Fatalf("migrate empty database: %v", err)
 	}
 	var migrationTimezone string
@@ -81,14 +85,14 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	if migrationTimezone != "UTC" {
 		t.Fatalf("migration timezone = %q, want UTC", migrationTimezone)
 	}
-	opened, err = foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
+	opened, err = platformdb.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 	if err != nil {
 		t.Fatalf("open compatible database: %v", err)
 	}
 	if err := opened.CheckClock(ctx, clock.System{}, 5*time.Second); err != nil {
 		t.Fatalf("check database clock: %v", err)
 	}
-	if err := opened.CheckClock(ctx, clock.Fixed{Instant: time.Unix(0, 0)}, time.Second); !errors.Is(err, foundation.ErrDatabaseClockSkew) {
+	if err := opened.CheckClock(ctx, clock.Fixed{Instant: time.Unix(0, 0)}, time.Second); !errors.Is(err, platformdb.ErrDatabaseClockSkew) {
 		t.Fatalf("bad database clock check = %v, want skew refusal", err)
 	}
 	opened.Close()
@@ -109,16 +113,16 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	}
 	writeSecret(string(databaseConfig.PasswordRef), password)
 	writeSecret("crypto.key", base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	dependencies, err := foundation.Build(ctx, foundation.Config{
+	dependencies, err := bootstrap.Build(ctx, bootstrap.Config{
 		Environment:  "development",
 		CheckTimeout: 30 * time.Second,
-		Features:     foundation.FeaturesConfig{Provider: foundation.FeatureProviderNoop},
-		Secrets:      foundation.SecretsConfig{Provider: foundation.SecretProviderFile, Directory: secretDirectory},
+		Features:     features.Config{Provider: features.ProviderNoop},
+		Secrets:      secret.Config{Provider: secret.ProviderFile, Directory: secretDirectory},
 		Database:     databaseConfig,
-		Storage:      foundation.StorageConfig{Provider: foundation.StorageProviderFile, Root: storageDirectory},
-		Crypto:       foundation.CryptoConfig{Provider: foundation.CryptoProviderLocal, KeyRef: "crypto.key"},
-		Time: foundation.TimeConfig{
-			Provider: foundation.TimeProviderSystem, MaxClockError: time.Second, MaxDatabaseSkew: 5 * time.Second,
+		Storage:      storage.Config{Provider: storage.ProviderFile, Root: storageDirectory},
+		Crypto:       crypto.Config{Provider: crypto.ProviderLocal, KeyRef: secret.Ref("crypto.key")},
+		Time: bootstrap.TimeConfig{
+			Provider: bootstrap.TimeProviderSystem, MaxClockError: time.Second, MaxDatabaseSkew: 5 * time.Second,
 		},
 	})
 	if err != nil {
@@ -138,7 +142,7 @@ AFTER UPDATE ON public.accountable_schema_state
 FOR EACH ROW EXECUTE FUNCTION audit_migration_state_update()`); err != nil {
 		t.Fatalf("install schema-state audit: %v", err)
 	}
-	if err := migration.Run(ctx, database, db.Migrations()); err != nil {
+	if err := migration.Run(ctx, database, migration.Catalogue()...); err != nil {
 		t.Fatalf("run no-op migration: %v", err)
 	}
 	var stateUpdates int
@@ -157,14 +161,14 @@ DROP TABLE migration_state_update_audit`); err != nil {
 	if _, err := database.ExecContext(ctx, `DELETE FROM public.accountable_schema_state`); err != nil {
 		t.Fatalf("delete schema state: %v", err)
 	}
-	opened, err = foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
+	opened, err = platformdb.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 	if opened != nil {
 		opened.Close()
 	}
-	if !errors.Is(err, foundation.ErrSchemaBehind) {
+	if !errors.Is(err, platformdb.ErrSchemaBehind) {
 		t.Fatalf("missing schema row error = %v, want schema behind", err)
 	}
-	if _, err := database.ExecContext(ctx, `INSERT INTO public.accountable_schema_state (singleton, version, dirty) VALUES (TRUE, $1, FALSE)`, foundation.MaximumSchemaVersion); err != nil {
+	if _, err := database.ExecContext(ctx, `INSERT INTO public.accountable_schema_state (singleton, version, dirty) VALUES (TRUE, $1, FALSE)`, platformdb.MaximumSchemaVersion); err != nil {
 		t.Fatalf("restore schema state: %v", err)
 	}
 
@@ -173,7 +177,7 @@ DROP TABLE migration_state_update_audit`); err != nil {
 		if _, err := database.ExecContext(ctx, `UPDATE accountable_schema_state SET version = $1, dirty = $2`, version, dirty); err != nil {
 			t.Fatalf("%s seed state: %v", name, err)
 		}
-		opened, err := foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
+		opened, err := platformdb.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 		if opened != nil {
 			opened.Close()
 		}
@@ -181,18 +185,18 @@ DROP TABLE migration_state_update_audit`); err != nil {
 			t.Fatalf("%s open error = %v, want %v", name, err, want)
 		}
 	}
-	assertRefused("behind", foundation.MinimumSchemaVersion-1, false, foundation.ErrSchemaBehind)
-	assertRefused("dirty", foundation.MinimumSchemaVersion, true, foundation.ErrSchemaDirty)
-	assertRefused("unknown ahead", foundation.MaximumSchemaVersion+1, false, foundation.ErrSchemaAhead)
+	assertRefused("behind", platformdb.MinimumSchemaVersion-1, false, platformdb.ErrSchemaBehind)
+	assertRefused("dirty", platformdb.MinimumSchemaVersion, true, platformdb.ErrSchemaDirty)
+	assertRefused("unknown ahead", platformdb.MaximumSchemaVersion+1, false, platformdb.ErrSchemaAhead)
 
 	reset()
-	if err := migration.Run(ctx, database, db.Migrations()); err != nil {
+	if err := migration.Run(ctx, database, migration.Catalogue()...); err != nil {
 		t.Fatalf("seed schema before failed migration: %v", err)
 	}
 	badMigrations := fstest.MapFS{
 		"00002_bad.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nTHIS IS NOT SQL;\n")},
 	}
-	if err := migration.Run(ctx, database, fs.FS(badMigrations)); err == nil {
+	if err := migration.Run(ctx, database, migration.Source{Owner: "bad", FS: fs.FS(badMigrations)}); err == nil {
 		t.Fatal("invalid migration succeeded")
 	}
 	var dirty bool
@@ -204,7 +208,7 @@ DROP TABLE migration_state_update_audit`); err != nil {
 	}
 }
 
-func databaseConfigFromDSN(t *testing.T, dsn string) (foundation.DatabaseConfig, string) {
+func databaseConfigFromDSN(t *testing.T, dsn string) (platformdb.Config, string) {
 	t.Helper()
 	parsed, err := url.Parse(dsn)
 	if err != nil {
@@ -218,10 +222,10 @@ func databaseConfigFromDSN(t *testing.T, dsn string) (foundation.DatabaseConfig,
 	if password == "" {
 		password = os.Getenv("ACCOUNTABLE_TEST_POSTGRES_PASSWORD")
 	}
-	return foundation.DatabaseConfig{
+	return platformdb.Config{
 		Host: parsed.Hostname(), Port: uint16(port), Name: parsed.Path[1:],
-		User: parsed.User.Username(), Role: parsed.User.Username(), PasswordRef: "database.test_password",
-		TLSMode: foundation.DatabaseTLSDisable, ConnectTimeout: 5 * time.Second,
+		User: parsed.User.Username(), Role: parsed.User.Username(), PasswordRef: secret.Ref("database.test_password"),
+		TLSMode: platformdb.TLSDisable, ConnectTimeout: 5 * time.Second,
 		StatementTimeout: 5 * time.Second, HealthCheckInterval: time.Second,
 		MaxConnections: 2, Timezone: "UTC",
 	}, password

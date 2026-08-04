@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/acctbl/accountable/internal/bootstrap"
 	"github.com/acctbl/accountable/internal/configfile"
-	"github.com/acctbl/accountable/internal/foundation"
 )
 
 const HTTPWriteTimeout = 30 * time.Second
@@ -25,11 +25,11 @@ type API struct {
 	TLSKeyFile        string
 	UnaryRPCDeadline  time.Duration
 	StreamRPCDeadline time.Duration
-	Foundation        foundation.Config
+	Foundation        bootstrap.Config
 }
 
 type APIFile struct {
-	foundation.FileConfig
+	bootstrap.FileConfig
 	Environment       string   `toml:"environment"`
 	ListenAddress     string   `toml:"listen_address"`
 	ArchitectureProbe *bool    `toml:"architecture_probe"`
@@ -106,7 +106,7 @@ func LoadAPI(args []string) (API, error) {
 	if err != nil {
 		return API{}, fmt.Errorf("trusted_proxy_cidrs: %w", err)
 	}
-	foundationConfig, err := foundation.Parse(raw.Environment, path, raw.FileConfig)
+	foundationConfig, err := bootstrap.Parse(raw.Environment, path, raw.FileConfig)
 	if err != nil {
 		return API{}, err
 	}

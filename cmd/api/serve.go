@@ -16,7 +16,9 @@ import (
 	"github.com/acctbl/accountable/gen/go/accountable/system/v1/systemv1connect"
 	"github.com/acctbl/accountable/internal/apierror"
 	"github.com/acctbl/accountable/internal/appconfig"
-	"github.com/acctbl/accountable/internal/foundation"
+	"github.com/acctbl/accountable/internal/bootstrap"
+	"github.com/acctbl/accountable/internal/modules/probe"
+	"github.com/acctbl/accountable/internal/modules/system"
 	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/acctbl/accountable/internal/server"
 )
@@ -47,7 +49,7 @@ func newAPIHandler(config config, ready *readiness) http.Handler {
 	return newAPIHandlerWithSystem(
 		config,
 		ready,
-		server.NewSystemServer(clock.System{}),
+		system.NewSystemServer(clock.System{}),
 	)
 }
 
@@ -88,7 +90,7 @@ func newAPIHandlerWithSystem(
 			connect.WithSendMaxBytes(streamMessageMaxBytes),
 		}
 		probePath, probeHandler := probev1connect.NewArchitectureProbeServiceHandler(
-			server.ArchitectureProbeServer{}, probeOptions...,
+			probe.ArchitectureProbeServer{}, probeOptions...,
 		)
 		mux.Handle(probePath, probeHandler)
 	}
@@ -177,8 +179,8 @@ func serve(ctx context.Context, config config) error {
 	return bootstrapAndServe(
 		ctx,
 		config,
-		func(ctx context.Context, config foundation.Config) (ownedDependencySet, error) {
-			return foundation.Build(ctx, config)
+		func(ctx context.Context, config bootstrap.Config) (ownedDependencySet, error) {
+			return bootstrap.Build(ctx, config)
 		},
 		serveWithDependencies,
 	)
@@ -192,7 +194,7 @@ type ownedDependencySet interface {
 func bootstrapAndServe(
 	ctx context.Context,
 	config config,
-	build func(context.Context, foundation.Config) (ownedDependencySet, error),
+	build func(context.Context, bootstrap.Config) (ownedDependencySet, error),
 	serve func(context.Context, config, dependencySet) error,
 ) error {
 	dependencies, err := build(ctx, config.Foundation)
@@ -258,7 +260,7 @@ func serveWithDependencies(ctx context.Context, config config, dependencies depe
 
 func monitorDependencies(
 	ctx context.Context,
-	config foundation.Config,
+	config bootstrap.Config,
 	dependencies dependencySet,
 	ready *readiness,
 ) {

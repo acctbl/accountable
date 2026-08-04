@@ -30,6 +30,27 @@ function isTheme(value: string | null): value is Theme {
 	return THEME_VALUES.includes(value as Theme);
 }
 
+function storageArea(): Storage | null {
+	try {
+		return window.localStorage;
+	} catch {
+		return null;
+	}
+}
+
+function readStoredTheme(storageKey: string): Theme | null {
+	const value = storageArea()?.getItem(storageKey) ?? null;
+	return isTheme(value) ? value : null;
+}
+
+function persistTheme(storageKey: string, theme: Theme) {
+	try {
+		storageArea()?.setItem(storageKey, theme);
+	} catch {
+		// A refused write only loses the stored preference.
+	}
+}
+
 function getSystemTheme(): ResolvedTheme {
 	if (window.matchMedia(COLOR_SCHEME_QUERY).matches) {
 		return "dark";
@@ -83,18 +104,13 @@ export function ThemeProvider({
 	disableTransitionOnChange = true,
 	...props
 }: ThemeProviderProps) {
-	const [theme, setThemeState] = React.useState<Theme>(() => {
-		const storedTheme = localStorage.getItem(storageKey);
-		if (isTheme(storedTheme)) {
-			return storedTheme;
-		}
-
-		return defaultTheme;
-	});
+	const [theme, setThemeState] = React.useState<Theme>(
+		() => readStoredTheme(storageKey) ?? defaultTheme,
+	);
 
 	const setTheme = React.useCallback(
 		(nextTheme: Theme) => {
-			localStorage.setItem(storageKey, nextTheme);
+			persistTheme(storageKey, nextTheme);
 			setThemeState(nextTheme);
 		},
 		[storageKey],
@@ -161,7 +177,7 @@ export function ThemeProvider({
 				const nextTheme =
 					THEME_VALUES[(currentIndex + 1) % THEME_VALUES.length] ?? "system";
 
-				localStorage.setItem(storageKey, nextTheme);
+				persistTheme(storageKey, nextTheme);
 				return nextTheme;
 			});
 		};
@@ -175,7 +191,7 @@ export function ThemeProvider({
 
 	React.useEffect(() => {
 		const handleStorageChange = (event: StorageEvent) => {
-			if (event.storageArea !== localStorage) {
+			if (event.storageArea !== storageArea()) {
 				return;
 			}
 

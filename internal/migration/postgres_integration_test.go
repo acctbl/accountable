@@ -195,7 +195,7 @@ DROP TABLE migration_state_update_audit`); err != nil {
 		t.Fatalf("seed schema before failed migration: %v", err)
 	}
 	badMigrations := fstest.MapFS{
-		"00002_bad.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nTHIS IS NOT SQL;\n")},
+		"20260801000001_bad_invalid.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nTHIS IS NOT SQL;\n")},
 	}
 	if err := migration.Run(ctx, database, migration.Source{Owner: "bad", FS: fs.FS(badMigrations)}); err == nil {
 		t.Fatal("invalid migration succeeded")
@@ -206,6 +206,82 @@ DROP TABLE migration_state_update_audit`); err != nil {
 	}
 	if !dirty {
 		t.Fatal("failed migration did not leave schema dirty")
+	}
+}
+
+func TestPostgresIntegrationConcurrentMigrators(t *testing.T) {
+	dsn := os.Getenv("ACCOUNTABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		if os.Getenv("ACCOUNTABLE_REQUIRE_POSTGRES") == "1" {
+			t.Fatal("ACCOUNTABLE_TEST_POSTGRES_DSN is required")
+		}
+		t.Skip("run through task test:postgres")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	first, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open first Postgres connection: %v", err)
+	}
+	defer func() { _ = first.Close() }()
+	second, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open second Postgres connection: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+	if _, err := first.ExecContext(ctx, `DROP TABLE IF EXISTS goose_db_version, accountable_schema_state`); err != nil {
+		t.Fatalf("reset database: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = first.ExecContext(context.Background(), `DROP TABLE IF EXISTS goose_db_version, accountable_schema_state`)
+	})
+
+	slowMigration := fstest.MapFS{
+		"20260801000000_platform_init.sql": &fstest.MapFile{Data: []byte(`-- +goose Up
+-- +goose StatementBegin
+CREATE TABLE public.accountable_schema_state (
+    singleton boolean PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+    version bigint NOT NULL,
+    dirty boolean NOT NULL
+);
+INSERT INTO public.accountable_schema_state (singleton, version, dirty) VALUES (TRUE, 0, FALSE);
+SELECT pg_sleep(0.3);
+-- +goose StatementEnd
+`)},
+	}
+	source := migration.Source{Owner: "platform/database", FS: fs.FS(slowMigration)}
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- migration.Run(ctx, first, source) }()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var locked bool
+		if err := second.QueryRowContext(ctx, `SELECT EXISTS (
+            SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted
+        )`).Scan(&locked); err != nil {
+			t.Fatalf("observe migration lock: %v", err)
+		}
+		if locked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("first migrator did not acquire its advisory lock")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := migration.Run(ctx, second, source); err == nil {
+		t.Fatal("second migrator bypassed the advisory lock")
+	}
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first migrator: %v", err)
+	}
+	var version int64
+	var dirty bool
+	if err := second.QueryRowContext(ctx, `SELECT version, dirty FROM accountable_schema_state WHERE singleton = TRUE`).Scan(&version, &dirty); err != nil {
+		t.Fatalf("read final schema state: %v", err)
+	}
+	if version != platformdb.MaximumSchemaVersion || dirty {
+		t.Fatalf("final schema state = (%d, %t), want (%d, false)", version, dirty, platformdb.MaximumSchemaVersion)
 	}
 }
 

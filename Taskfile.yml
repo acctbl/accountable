@@ -147,6 +147,7 @@ tasks:
   migrations:check:
     desc: Validate goose migrations
     cmds:
+      - go test ./internal/migration -run TestCommittedCatalogueMatchesFilenameContract -count=1
       - goose -dir internal/platform/database/migrations validate
 
   tofu:

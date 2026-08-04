@@ -131,6 +131,7 @@ tasks:
     desc: Run integration tests in every Go package and Playwright
     cmds:
       - task: test:postgres
+      - task: test:aws-contract
       - go test -race ./... -run Integration
       - pnpm exec playwright test tests/integration
 
@@ -140,6 +141,14 @@ tasks:
       - >-
         bash scripts/with-test-postgres.sh go test -race
         ./internal/migration ./tests/foundation -run PostgresIntegration -count=1
+
+  test:aws-contract:
+    desc: Prove the S3 and KMS adapters against LocalStack
+    cmds:
+      - >-
+        bash scripts/with-localstack.sh bash -c
+        'go test -race -v ./internal/platform/storage -run LocalStackContract -count=1 -timeout=90s &&
+        go test -race -v ./internal/platform/crypto -run LocalStackContract -count=1 -timeout=90s'
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only

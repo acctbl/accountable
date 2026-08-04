@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestDummyFeatureFlagUsesOpenFeatureDefault(t *testing.T) {
@@ -39,5 +40,24 @@ func TestDummyFeatureFlagCanResolveTrue(t *testing.T) {
 	evaluation := flags.BootstrapProbe(context.Background())
 	if !evaluation.Enabled || evaluation.Defaulted {
 		t.Fatalf("resolved evaluation = %+v, want true", evaluation)
+	}
+}
+
+func TestEveryEvaluatedFlagHasCompleteDeclaration(t *testing.T) {
+	t.Parallel()
+
+	declarations := Declarations()
+	if len(declarations) != 1 {
+		t.Fatalf("declarations = %d, want 1", len(declarations))
+	}
+	declaration := declarations[0]
+	if declaration.Key != BootstrapProbeFlag || declaration.Type != FlagTypeBoolean ||
+		declaration.Owner == "" || declaration.Purpose == "" || declaration.SafeDefault {
+		t.Fatalf("incomplete declaration: %+v", declaration)
+	}
+	created, createdErr := time.Parse(time.DateOnly, declaration.CreatedOn)
+	review, reviewErr := time.Parse(time.DateOnly, declaration.ReviewBy)
+	if createdErr != nil || reviewErr != nil || !review.After(created) {
+		t.Fatalf("invalid declaration dates: %+v", declaration)
 	}
 }

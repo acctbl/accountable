@@ -95,12 +95,12 @@ func TestAWSCryptoRefusesMissingOrMismatchedContextPair(t *testing.T) {
 	for name, mutate := range map[string]func(map[string]string) map[string]string{
 		"missing pair": func(requested map[string]string) map[string]string {
 			stored := maps.Clone(requested)
-			delete(stored, "purpose")
+			delete(stored, "accountable.foundation.purpose")
 			return stored
 		},
 		"mismatched value": func(requested map[string]string) map[string]string {
 			stored := maps.Clone(requested)
-			stored["application"] = "other"
+			stored["accountable.foundation.application"] = "other"
 			return stored
 		},
 	} {
@@ -108,5 +108,23 @@ func TestAWSCryptoRefusesMissingOrMismatchedContextPair(t *testing.T) {
 		if err := newAWSCrypto(engine).Check(context.Background()); !errors.Is(err, ErrCryptoUnavailable) {
 			t.Fatalf("%s: Check = %v, want crypto unavailable", name, err)
 		}
+	}
+}
+
+func TestAWSCryptoUsesConfiguredEncryptionContextPrefix(t *testing.T) {
+	t.Parallel()
+
+	engine := &awsEncryptionEngine{
+		encryptionContextPrefix: "payroll.foundation",
+		client: fakeEncryptionSDK{decryptContext: func(requested map[string]string) map[string]string {
+			if requested["payroll.foundation.application"] != "accountable" ||
+				requested["payroll.foundation.purpose"] != "foundation" || len(requested) != 2 {
+				t.Fatalf("encryption context = %v", requested)
+			}
+			return maps.Clone(requested)
+		}},
+	}
+	if err := newAWSCrypto(engine).Check(context.Background()); err != nil {
+		t.Fatalf("Check: %v", err)
 	}
 }

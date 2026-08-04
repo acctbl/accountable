@@ -51,7 +51,8 @@ func (s *S3Storage) Check(ctx context.Context) error {
 	}
 
 	want := []byte("accountable-storage-preflight")
-	key := strings.TrimSuffix(s.config.Prefix, "/") + "/.accountable-preflight/" + uuid.NewString()
+	key := strings.TrimSuffix(s.config.Prefix, "/") + "/.accountable-preflight/" +
+		s.config.AccessPurpose + "/" + uuid.NewString()
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:               aws.String(s.config.Bucket),
 		Key:                  aws.String(key),

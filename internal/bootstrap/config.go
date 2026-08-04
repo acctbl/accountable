@@ -12,35 +12,55 @@ import (
 
 	"github.com/acctbl/accountable/internal/platform/crypto"
 	"github.com/acctbl/accountable/internal/platform/database"
-	"github.com/acctbl/accountable/internal/platform/features"
 	"github.com/acctbl/accountable/internal/platform/secret"
 	"github.com/acctbl/accountable/internal/platform/storage"
 )
 
 const (
-	TimeProviderSystem = "system"
-	TimeProviderLinux  = "linux"
+	TimeProviderSystem           = "system"
+	TimeProviderLinux            = "linux"
+	RuntimeRoleAPI               = "api"
+	RuntimeRoleMigrate           = "migrate"
+	RuntimeRolePreflight         = "preflight"
+	AccessPurposeFoundationProof = "foundation-proof"
 
 	infisicalCloudEUEndpoint = secret.InfisicalCloudEUEndpoint
 )
 
 var (
-	postgresIdentifier  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
-	awsRegionPattern    = regexp.MustCompile(`^[a-z]{2}(?:-gov)?-[a-z]+-\d$`)
-	awsAccountPattern   = regexp.MustCompile(`^[0-9]{12}$`)
-	s3BucketPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
-	awsKMSKeyARNPattern = regexp.MustCompile(`^arn:aws(?:-us-gov)?:kms:([a-z0-9-]+):([0-9]{12}):key/[A-Za-z0-9-]+$`)
+	postgresIdentifier           = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
+	awsRegionPattern             = regexp.MustCompile(`^[a-z]{2}(?:-gov)?-[a-z]+-\d$`)
+	awsAccountPattern            = regexp.MustCompile(`^[0-9]{12}$`)
+	s3BucketPattern              = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+	awsKMSKeyARNPattern          = regexp.MustCompile(`^arn:aws(?:-us-gov)?:kms:([a-z0-9-]+):([0-9]{12}):key/[A-Za-z0-9-]+$`)
+	configurationRevisionPattern = regexp.MustCompile(`^[-A-Za-z0-9._]{1,128}$`)
+	cellIDPattern                = regexp.MustCompile(`^[-A-Za-z0-9._]{1,64}$`)
 )
 
 type Config struct {
-	Environment  string
-	CheckTimeout time.Duration
-	Features     features.Config
-	Secrets      secret.Config
-	Database     database.Config
-	Storage      storage.Config
-	Crypto       crypto.Config
-	Time         TimeConfig
+	SchemaVersion          int
+	Revision               string
+	Environment            string
+	CellID                 string
+	AWSRegion              string
+	RuntimeRole            string
+	Fingerprint            string
+	Capabilities           Capabilities
+	CheckTimeout           time.Duration
+	ReadinessProbeInterval time.Duration
+	Secrets                secret.Config
+	Database               database.Config
+	Storage                storage.Config
+	Crypto                 crypto.Config
+	Time                   TimeConfig
+}
+
+type Capabilities struct {
+	ArchitectureProbe bool
+	Postgres          bool
+	Secrets           bool
+	KMS               bool
+	ObjectStorage     bool
 }
 
 type TimeConfig struct {
@@ -49,19 +69,31 @@ type TimeConfig struct {
 	MaxDatabaseSkew time.Duration
 }
 
-// FileConfig is embedded in each binary's strict TOML document.
 type FileConfig struct {
-	CheckTimeout string             `toml:"foundation_check_timeout"`
-	Features     FeaturesFileConfig `toml:"features"`
-	Secrets      SecretsFileConfig  `toml:"secrets"`
-	Database     DatabaseFileConfig `toml:"database"`
-	Storage      StorageFileConfig  `toml:"storage"`
-	Crypto       CryptoFileConfig   `toml:"crypto"`
-	Time         TimeFileConfig     `toml:"time"`
+	SchemaVersion          int                    `toml:"schema_version"`
+	Revision               string                 `toml:"revision"`
+	Environment            string                 `toml:"environment"`
+	CellID                 string                 `toml:"cell_id"`
+	AWSRegion              string                 `toml:"aws_region"`
+	RuntimeRole            string                 `toml:"runtime_role"`
+	Capabilities           CapabilitiesFileConfig `toml:"capabilities"`
+	Secrets                *SecretsFileConfig     `toml:"secrets"`
+	Postgres               *DatabaseFileConfig    `toml:"postgres"`
+	ObjectStorage          *StorageFileConfig     `toml:"object_storage"`
+	KMS                    *CryptoFileConfig      `toml:"kms"`
+	Time                   *TimeFileConfig        `toml:"time"`
+	CheckTimeout           string                 `toml:"foundation_check_timeout"`
+	ReadinessProbeInterval string                 `toml:"readiness_probe_interval"`
 }
 
-type FeaturesFileConfig struct {
-	Provider string `toml:"provider"`
+type CapabilitiesFileConfig struct {
+	ArchitectureProbe *bool `toml:"architecture_probe"`
+	Postgres          *bool `toml:"postgres"`
+	Secrets           *bool `toml:"secrets"`
+	KMS               *bool `toml:"kms"`
+	ObjectStorage     *bool `toml:"object_storage"`
+	Telemetry         *bool `toml:"telemetry"`
+	Redpanda          *bool `toml:"redpanda"`
 }
 
 type SecretsFileConfig struct {
@@ -100,13 +132,15 @@ type StorageFileConfig struct {
 	Prefix        string `toml:"prefix"`
 	ExpectedOwner string `toml:"expected_owner"`
 	KMSKeyARN     string `toml:"kms_key_arn"`
+	AccessPurpose string `toml:"access_purpose"`
 }
 
 type CryptoFileConfig struct {
-	Provider  string `toml:"provider"`
-	KeyRef    string `toml:"key_ref"`
-	Region    string `toml:"region"`
-	KMSKeyARN string `toml:"kms_key_arn"`
+	Provider                string `toml:"provider"`
+	KeyRef                  string `toml:"key_ref"`
+	Region                  string `toml:"region"`
+	KMSKeyARN               string `toml:"kms_key_arn"`
+	EncryptionContextPrefix string `toml:"encryption_context_prefix"`
 }
 
 type TimeFileConfig struct {
@@ -115,56 +149,138 @@ type TimeFileConfig struct {
 	MaxDatabaseSkew string `toml:"max_database_skew"`
 }
 
-func Parse(environment, configPath string, raw FileConfig) (Config, error) {
-	if environment != "development" && environment != "staging" && environment != "production" {
+func Parse(configPath, fingerprint string, raw FileConfig) (Config, error) {
+	if raw.SchemaVersion != 1 {
+		return Config{}, errors.New("schema_version must be 1")
+	}
+	if !configurationRevisionPattern.MatchString(raw.Revision) {
+		return Config{}, errors.New("revision must be 1 to 128 characters using only letters, digits, '.', '_', or '-'")
+	}
+	if raw.Environment != "development" && raw.Environment != "staging" && raw.Environment != "production" {
 		return Config{}, errors.New("environment must be development, staging, or production")
 	}
-	if raw.Features.Provider != features.ProviderNoop {
-		return Config{}, errors.New("features.provider must be noop")
+	if !cellIDPattern.MatchString(raw.CellID) {
+		return Config{}, errors.New("cell_id must be 1 to 64 opaque identifier characters")
+	}
+	if !awsRegionPattern.MatchString(raw.AWSRegion) {
+		return Config{}, errors.New("aws_region is invalid")
+	}
+	if raw.RuntimeRole != RuntimeRoleAPI && raw.RuntimeRole != RuntimeRoleMigrate && raw.RuntimeRole != RuntimeRolePreflight {
+		return Config{}, errors.New("runtime_role must be api, migrate, or preflight")
+	}
+	capabilities, err := parseCapabilities(raw)
+	if err != nil {
+		return Config{}, err
+	}
+	if raw.Environment == "production" && capabilities.ArchitectureProbe {
+		return Config{}, errors.New("production preflight: capabilities.architecture_probe must be false")
+	}
+	if capabilities.Postgres && !capabilities.Secrets {
+		return Config{}, errors.New("capabilities.postgres requires capabilities.secrets")
+	}
+	if raw.Environment == "development" && capabilities.KMS && !capabilities.Secrets {
+		return Config{}, errors.New("development capabilities.kms requires capabilities.secrets")
 	}
 	checkTimeout, err := parsePositiveDuration("foundation_check_timeout", raw.CheckTimeout)
 	if err != nil {
 		return Config{}, err
 	}
-	managed := environment == "staging" || environment == "production"
-	secrets, err := parseSecrets(environment, managed, configPath, raw.Secrets)
+	readinessProbeInterval, err := parsePositiveDuration("readiness_probe_interval", raw.ReadinessProbeInterval)
 	if err != nil {
 		return Config{}, err
 	}
-	databaseConfig, err := parseDatabase(managed, configPath, raw.Database)
-	if err != nil {
-		return Config{}, err
+	managed := raw.Environment == "staging" || raw.Environment == "production"
+	var secretsConfig secret.Config
+	if capabilities.Secrets {
+		secretsConfig, err = parseSecrets(raw.Environment, managed, raw.AWSRegion, configPath, *raw.Secrets)
+		if err != nil {
+			return Config{}, err
+		}
 	}
-	storageConfig, err := parseStorage(managed, configPath, raw.Storage)
-	if err != nil {
-		return Config{}, err
+	var databaseConfig database.Config
+	if capabilities.Postgres {
+		databaseConfig, err = parseDatabase(managed, configPath, *raw.Postgres)
+		if err != nil {
+			return Config{}, err
+		}
 	}
-	cryptoConfig, err := parseCrypto(managed, raw.Crypto)
-	if err != nil {
-		return Config{}, err
+	var storageConfig storage.Config
+	if capabilities.ObjectStorage {
+		storageConfig, err = parseStorage(managed, raw.AWSRegion, configPath, *raw.ObjectStorage)
+		if err != nil {
+			return Config{}, err
+		}
 	}
-	timeConfig, err := parseTime(managed, raw.Time)
+	var cryptoConfig crypto.Config
+	if capabilities.KMS {
+		cryptoConfig, err = parseCrypto(managed, raw.AWSRegion, *raw.KMS)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	timeConfig, err := parseTime(managed, *raw.Time)
 	if err != nil {
 		return Config{}, err
 	}
 	return Config{
-		Environment:  environment,
-		CheckTimeout: checkTimeout,
-		Features:     features.Config{Provider: raw.Features.Provider},
-		Secrets:      secrets,
-		Database:     databaseConfig,
-		Storage:      storageConfig,
-		Crypto:       cryptoConfig,
-		Time:         timeConfig,
+		SchemaVersion: raw.SchemaVersion, Revision: raw.Revision, Environment: raw.Environment,
+		CellID: raw.CellID, AWSRegion: raw.AWSRegion, RuntimeRole: raw.RuntimeRole, Fingerprint: fingerprint,
+		Capabilities: capabilities, CheckTimeout: checkTimeout, ReadinessProbeInterval: readinessProbeInterval,
+		Secrets: secretsConfig, Database: databaseConfig, Storage: storageConfig, Crypto: cryptoConfig, Time: timeConfig,
 	}, nil
 }
 
-func parseSecrets(environment string, managed bool, configPath string, raw SecretsFileConfig) (secret.Config, error) {
+func parseCapabilities(raw FileConfig) (Capabilities, error) {
+	checks := []struct {
+		name    string
+		enabled *bool
+		section bool
+	}{
+		{"postgres", raw.Capabilities.Postgres, raw.Postgres != nil},
+		{"secrets", raw.Capabilities.Secrets, raw.Secrets != nil},
+		{"kms", raw.Capabilities.KMS, raw.KMS != nil},
+		{"object_storage", raw.Capabilities.ObjectStorage, raw.ObjectStorage != nil},
+	}
+	if raw.Capabilities.ArchitectureProbe == nil || raw.Capabilities.Telemetry == nil || raw.Capabilities.Redpanda == nil {
+		return Capabilities{}, errors.New("every capability must be explicitly true or false")
+	}
+	for _, check := range checks {
+		if check.enabled == nil {
+			return Capabilities{}, fmt.Errorf("capabilities.%s must be explicitly true or false", check.name)
+		}
+		if *check.enabled != check.section {
+			return Capabilities{}, fmt.Errorf("capabilities.%s contradicts the %s section", check.name, check.name)
+		}
+	}
+	if *raw.Capabilities.Telemetry {
+		return Capabilities{}, errors.New("capabilities.telemetry must be false until telemetry is implemented")
+	}
+	if *raw.Capabilities.Redpanda {
+		return Capabilities{}, errors.New("capabilities.redpanda must be false until Redpanda is implemented")
+	}
+	if raw.Time == nil {
+		return Capabilities{}, errors.New("time section is required")
+	}
+	return Capabilities{
+		ArchitectureProbe: *raw.Capabilities.ArchitectureProbe,
+		Postgres:          *raw.Capabilities.Postgres, Secrets: *raw.Capabilities.Secrets,
+		KMS: *raw.Capabilities.KMS, ObjectStorage: *raw.Capabilities.ObjectStorage,
+	}, nil
+}
+
+func parseSecrets(environment string, managed bool, awsRegion, configPath string, raw SecretsFileConfig) (secret.Config, error) {
 	if !managed {
 		if raw.Provider != secret.ProviderFile || raw.Directory == "" {
 			return secret.Config{}, errors.New("development secrets.provider must be file with a directory")
 		}
+		if raw.SiteURL != "" || raw.AWSRegion != "" || raw.ProjectID != "" || raw.Environment != "" ||
+			raw.SecretPath != "" || raw.AuthMethod != "" || raw.MachineIdentityID != "" {
+			return secret.Config{}, errors.New("file secrets cannot include Infisical settings")
+		}
 		return secret.Config{Provider: raw.Provider, Directory: absoluteFrom(filepath.Dir(configPath), raw.Directory)}, nil
+	}
+	if raw.Directory != "" {
+		return secret.Config{}, errors.New("infisical secrets cannot include a file directory")
 	}
 	if raw.Provider != secret.ProviderInfisical {
 		return secret.Config{}, errors.New("staging and production secrets.provider must be infisical")
@@ -175,6 +291,9 @@ func parseSecrets(environment string, managed bool, configPath string, raw Secre
 	}
 	if !awsRegionPattern.MatchString(raw.AWSRegion) {
 		return secret.Config{}, errors.New("infisical aws_region is invalid")
+	}
+	if raw.AWSRegion != awsRegion {
+		return secret.Config{}, errors.New("infisical aws_region must match the top-level aws_region")
 	}
 	if raw.ProjectID == "" || raw.Environment == "" || raw.MachineIdentityID == "" {
 		return secret.Config{}, errors.New("infisical project_id, environment, and machine_identity_id are required")
@@ -256,53 +375,85 @@ func parseDatabase(managed bool, configPath string, raw DatabaseFileConfig) (dat
 	}, nil
 }
 
-func parseStorage(managed bool, configPath string, raw StorageFileConfig) (storage.Config, error) {
+func parseStorage(managed bool, awsRegion, configPath string, raw StorageFileConfig) (storage.Config, error) {
+	if raw.AccessPurpose != AccessPurposeFoundationProof {
+		return storage.Config{}, errors.New("object_storage.access_purpose must be foundation-proof")
+	}
 	if !managed {
 		if raw.Provider != storage.ProviderFile || raw.Root == "" {
-			return storage.Config{}, errors.New("development storage.provider must be filesystem with a root")
+			return storage.Config{}, errors.New("development object_storage.provider must be filesystem with a root")
 		}
-		return storage.Config{Provider: raw.Provider, Root: absoluteFrom(filepath.Dir(configPath), raw.Root)}, nil
+		if raw.Region != "" || raw.Bucket != "" || raw.Prefix != "" || raw.ExpectedOwner != "" || raw.KMSKeyARN != "" {
+			return storage.Config{}, errors.New("filesystem object storage cannot include S3 settings")
+		}
+		return storage.Config{
+			Provider: raw.Provider, Root: absoluteFrom(filepath.Dir(configPath), raw.Root),
+			AccessPurpose: raw.AccessPurpose,
+		}, nil
 	}
 	if raw.Provider != storage.ProviderS3 {
-		return storage.Config{}, errors.New("staging and production storage.provider must be s3")
+		return storage.Config{}, errors.New("staging and production object_storage.provider must be s3")
+	}
+	if raw.Root != "" {
+		return storage.Config{}, errors.New("S3 object storage cannot include a filesystem root")
 	}
 	if !awsRegionPattern.MatchString(raw.Region) || !s3BucketPattern.MatchString(raw.Bucket) ||
 		!awsAccountPattern.MatchString(raw.ExpectedOwner) {
 		return storage.Config{}, errors.New("S3 region, bucket, and expected_owner are invalid")
 	}
+	if raw.Region != awsRegion {
+		return storage.Config{}, errors.New("object_storage.region must match the top-level aws_region")
+	}
 	if raw.Prefix == "" || strings.HasPrefix(raw.Prefix, "/") || strings.Contains(raw.Prefix, "..") {
 		return storage.Config{}, errors.New("S3 prefix must be a non-empty relative prefix")
 	}
 	if err := validateKMSKeyARN(raw.KMSKeyARN, raw.Region, raw.ExpectedOwner); err != nil {
-		return storage.Config{}, fmt.Errorf("storage.kms_key_arn: %w", err)
+		return storage.Config{}, fmt.Errorf("object_storage.kms_key_arn: %w", err)
 	}
 	return storage.Config{
 		Provider: raw.Provider, Region: raw.Region, Bucket: raw.Bucket, Prefix: raw.Prefix,
-		ExpectedOwner: raw.ExpectedOwner, KMSKeyARN: raw.KMSKeyARN,
+		ExpectedOwner: raw.ExpectedOwner, KMSKeyARN: raw.KMSKeyARN, AccessPurpose: raw.AccessPurpose,
 	}, nil
 }
 
-func parseCrypto(managed bool, raw CryptoFileConfig) (crypto.Config, error) {
+func parseCrypto(managed bool, awsRegion string, raw CryptoFileConfig) (crypto.Config, error) {
+	if strings.TrimSpace(raw.EncryptionContextPrefix) == "" {
+		return crypto.Config{}, errors.New("kms.encryption_context_prefix is required")
+	}
 	if !managed {
 		if raw.Provider != crypto.ProviderLocal {
-			return crypto.Config{}, errors.New("development crypto.provider must be local")
+			return crypto.Config{}, errors.New("development kms.provider must be local")
 		}
 		keyRef, err := secret.ParseRef(raw.KeyRef)
 		if err != nil {
-			return crypto.Config{}, fmt.Errorf("crypto.key_ref: %w", err)
+			return crypto.Config{}, fmt.Errorf("kms.key_ref: %w", err)
 		}
-		return crypto.Config{Provider: raw.Provider, KeyRef: keyRef}, nil
+		if raw.Region != "" || raw.KMSKeyARN != "" {
+			return crypto.Config{}, errors.New("local KMS cannot include AWS KMS settings")
+		}
+		return crypto.Config{
+			Provider: raw.Provider, KeyRef: keyRef, EncryptionContextPrefix: raw.EncryptionContextPrefix,
+		}, nil
 	}
 	if raw.Provider != crypto.ProviderAWSKMS {
-		return crypto.Config{}, errors.New("staging and production crypto.provider must be aws_kms")
+		return crypto.Config{}, errors.New("staging and production kms.provider must be aws_kms")
+	}
+	if raw.KeyRef != "" {
+		return crypto.Config{}, errors.New("AWS KMS cannot include a local key reference")
 	}
 	if !awsRegionPattern.MatchString(raw.Region) {
-		return crypto.Config{}, errors.New("crypto.region is invalid")
+		return crypto.Config{}, errors.New("kms.region is invalid")
+	}
+	if raw.Region != awsRegion {
+		return crypto.Config{}, errors.New("kms.region must match the top-level aws_region")
 	}
 	if err := validateKMSKeyARN(raw.KMSKeyARN, raw.Region, ""); err != nil {
-		return crypto.Config{}, fmt.Errorf("crypto.kms_key_arn: %w", err)
+		return crypto.Config{}, fmt.Errorf("kms.kms_key_arn: %w", err)
 	}
-	return crypto.Config{Provider: raw.Provider, Region: raw.Region, KMSKeyARN: raw.KMSKeyARN}, nil
+	return crypto.Config{
+		Provider: raw.Provider, Region: raw.Region, KMSKeyARN: raw.KMSKeyARN,
+		EncryptionContextPrefix: raw.EncryptionContextPrefix,
+	}, nil
 }
 
 func parseTime(managed bool, raw TimeFileConfig) (TimeConfig, error) {

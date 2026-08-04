@@ -3,9 +3,13 @@ package migration_test
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"io/fs"
+	"net/url"
 	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -13,13 +17,18 @@ import (
 	"github.com/acctbl/accountable/db"
 	"github.com/acctbl/accountable/internal/foundation"
 	"github.com/acctbl/accountable/internal/migration"
+	"github.com/acctbl/accountable/internal/platform/clock"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-type staticResolver struct{ dsn string }
+type staticResolver struct{ password string }
 
-func (r staticResolver) Resolve(context.Context, foundation.SecretRef) (foundation.SecretValue, error) {
-	return foundation.NewSecretValue([]byte(r.dsn)), nil
+func (r staticResolver) ResolveBatch(_ context.Context, refs []foundation.SecretRef) (map[foundation.SecretRef]foundation.SecretValue, error) {
+	values := make(map[foundation.SecretRef]foundation.SecretValue, len(refs))
+	for _, ref := range refs {
+		values[ref] = foundation.NewSecretValue([]byte(r.password))
+	}
+	return values, nil
 }
 
 func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
@@ -46,14 +55,8 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	reset()
 	defer reset()
 
-	databaseConfig := foundation.DatabaseConfig{
-		DSNRef:              "database.test_dsn",
-		ConnectTimeout:      5 * time.Second,
-		HealthCheckInterval: time.Second,
-		MaxConnections:      2,
-		Timezone:            "UTC",
-	}
-	opened, err := foundation.OpenDatabase(ctx, databaseConfig, staticResolver{dsn: dsn})
+	databaseConfig, password := databaseConfigFromDSN(t, dsn)
+	opened, err := foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 	if !errors.Is(err, foundation.ErrSchemaBehind) || opened != nil {
 		t.Fatalf("empty database open = (%v, %v), want schema behind", opened, err)
 	}
@@ -78,11 +81,50 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	if migrationTimezone != "UTC" {
 		t.Fatalf("migration timezone = %q, want UTC", migrationTimezone)
 	}
-	opened, err = foundation.OpenDatabase(ctx, databaseConfig, staticResolver{dsn: dsn})
+	opened, err = foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 	if err != nil {
 		t.Fatalf("open compatible database: %v", err)
 	}
+	if err := opened.CheckClock(ctx, clock.System{}, 5*time.Second); err != nil {
+		t.Fatalf("check database clock: %v", err)
+	}
+	if err := opened.CheckClock(ctx, clock.Fixed{Instant: time.Unix(0, 0)}, time.Second); !errors.Is(err, foundation.ErrDatabaseClockSkew) {
+		t.Fatalf("bad database clock check = %v, want skew refusal", err)
+	}
 	opened.Close()
+	root := t.TempDir()
+	secretDirectory := filepath.Join(root, "secrets")
+	storageDirectory := filepath.Join(root, "storage")
+	if err := os.Mkdir(secretDirectory, 0o700); err != nil {
+		t.Fatalf("create secret directory: %v", err)
+	}
+	if err := os.Mkdir(storageDirectory, 0o700); err != nil {
+		t.Fatalf("create storage directory: %v", err)
+	}
+	writeSecret := func(name, value string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(secretDirectory, name), []byte(value), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	writeSecret(string(databaseConfig.PasswordRef), password)
+	writeSecret("crypto.key", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	dependencies, err := foundation.Build(ctx, foundation.Config{
+		Environment:  "development",
+		CheckTimeout: 30 * time.Second,
+		Features:     foundation.FeaturesConfig{Provider: foundation.FeatureProviderNoop},
+		Secrets:      foundation.SecretsConfig{Provider: foundation.SecretProviderFile, Directory: secretDirectory},
+		Database:     databaseConfig,
+		Storage:      foundation.StorageConfig{Provider: foundation.StorageProviderFile, Root: storageDirectory},
+		Crypto:       foundation.CryptoConfig{Provider: foundation.CryptoProviderLocal, KeyRef: "crypto.key"},
+		Time: foundation.TimeConfig{
+			Provider: foundation.TimeProviderSystem, MaxClockError: time.Second, MaxDatabaseSkew: 5 * time.Second,
+		},
+	})
+	if err != nil {
+		t.Fatalf("build complete local foundation: %v", err)
+	}
+	dependencies.Close()
 	if _, err := database.ExecContext(ctx, `
 CREATE TABLE migration_state_update_audit (updated_at timestamptz NOT NULL DEFAULT now());
 CREATE FUNCTION audit_migration_state_update() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -115,7 +157,7 @@ DROP TABLE migration_state_update_audit`); err != nil {
 	if _, err := database.ExecContext(ctx, `DELETE FROM public.accountable_schema_state`); err != nil {
 		t.Fatalf("delete schema state: %v", err)
 	}
-	opened, err = foundation.OpenDatabase(ctx, databaseConfig, staticResolver{dsn: dsn})
+	opened, err = foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 	if opened != nil {
 		opened.Close()
 	}
@@ -131,7 +173,7 @@ DROP TABLE migration_state_update_audit`); err != nil {
 		if _, err := database.ExecContext(ctx, `UPDATE accountable_schema_state SET version = $1, dirty = $2`, version, dirty); err != nil {
 			t.Fatalf("%s seed state: %v", name, err)
 		}
-		opened, err := foundation.OpenDatabase(ctx, databaseConfig, staticResolver{dsn: dsn})
+		opened, err := foundation.OpenDatabase(ctx, databaseConfig, staticResolver{password: password})
 		if opened != nil {
 			opened.Close()
 		}
@@ -160,4 +202,27 @@ DROP TABLE migration_state_update_audit`); err != nil {
 	if !dirty {
 		t.Fatal("failed migration did not leave schema dirty")
 	}
+}
+
+func databaseConfigFromDSN(t *testing.T, dsn string) (foundation.DatabaseConfig, string) {
+	t.Helper()
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse test DSN: %v", err)
+	}
+	port, err := strconv.ParseUint(parsed.Port(), 10, 16)
+	if err != nil {
+		t.Fatalf("parse test database port: %v", err)
+	}
+	password, _ := parsed.User.Password()
+	if password == "" {
+		password = os.Getenv("ACCOUNTABLE_TEST_POSTGRES_PASSWORD")
+	}
+	return foundation.DatabaseConfig{
+		Host: parsed.Hostname(), Port: uint16(port), Name: parsed.Path[1:],
+		User: parsed.User.Username(), Role: parsed.User.Username(), PasswordRef: "database.test_password",
+		TLSMode: foundation.DatabaseTLSDisable, ConnectTimeout: 5 * time.Second,
+		StatementTimeout: 5 * time.Second, HealthCheckInterval: time.Second,
+		MaxConnections: 2, Timezone: "UTC",
+	}, password
 }

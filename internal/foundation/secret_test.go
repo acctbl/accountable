@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestFileSecretResolverReturnsRedactedValue(t *testing.T) {
+func TestFileSecretSourceReturnsRedactedValue(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
@@ -16,14 +16,15 @@ func TestFileSecretResolverReturnsRedactedValue(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(directory, "database.api_dsn"), secret, 0o600); err != nil {
 		t.Fatalf("write secret: %v", err)
 	}
-	resolver, err := NewFileSecretResolver(directory)
+	resolver, err := NewFileSecretSource(directory)
 	if err != nil {
-		t.Fatalf("NewFileSecretResolver: %v", err)
+		t.Fatalf("NewFileSecretSource: %v", err)
 	}
-	value, err := resolver.Resolve(context.Background(), "database.api_dsn")
+	values, err := resolver.ResolveBatch(context.Background(), []SecretRef{"database.api_dsn"})
 	if err != nil {
-		t.Fatalf("Resolve: %v", err)
+		t.Fatalf("ResolveBatch: %v", err)
 	}
+	value := values["database.api_dsn"]
 	if got := string(value.Bytes()); got != strings.TrimSpace(string(secret)) {
 		t.Fatalf("resolved value = %q", got)
 	}
@@ -32,7 +33,7 @@ func TestFileSecretResolverReturnsRedactedValue(t *testing.T) {
 	}
 }
 
-func TestFileSecretResolverRefusesMissingUnsafeOrEscapingFiles(t *testing.T) {
+func TestFileSecretSourceRefusesMissingUnsafeOrEscapingFiles(t *testing.T) {
 	t.Parallel()
 
 	directory := t.TempDir()
@@ -40,14 +41,14 @@ func TestFileSecretResolverRefusesMissingUnsafeOrEscapingFiles(t *testing.T) {
 	if err := os.WriteFile(path, []byte("secret"), 0o644); err != nil {
 		t.Fatalf("write secret: %v", err)
 	}
-	resolver, err := NewFileSecretResolver(directory)
+	resolver, err := NewFileSecretSource(directory)
 	if err != nil {
-		t.Fatalf("NewFileSecretResolver: %v", err)
+		t.Fatalf("NewFileSecretSource: %v", err)
 	}
-	if _, err := resolver.Resolve(context.Background(), "crypto.key"); err == nil {
+	if _, err := resolver.ResolveBatch(context.Background(), []SecretRef{"crypto.key"}); err == nil {
 		t.Fatal("Resolve succeeded with group/world-readable secret")
 	}
-	if _, err := resolver.Resolve(context.Background(), "missing.key"); err == nil {
+	if _, err := resolver.ResolveBatch(context.Background(), []SecretRef{"missing.key"}); err == nil {
 		t.Fatal("Resolve succeeded with missing secret")
 	}
 
@@ -58,7 +59,26 @@ func TestFileSecretResolverRefusesMissingUnsafeOrEscapingFiles(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(directory, "escape")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	if _, err := resolver.Resolve(context.Background(), "escape/escaped.key"); err == nil {
+	if _, err := resolver.ResolveBatch(context.Background(), []SecretRef{"escape/escaped.key"}); err == nil {
 		t.Fatal("Resolve followed an intermediate symlink outside the secret directory")
+	}
+}
+
+func TestFileSecretSourceResolvesBatchAtomically(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "one"), []byte("first"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	resolver, err := NewFileSecretSource(directory)
+	if err != nil {
+		t.Fatalf("NewFileSecretSource: %v", err)
+	}
+	if values, err := resolver.ResolveBatch(context.Background(), []SecretRef{"one", "missing"}); err == nil || values != nil {
+		t.Fatalf("partial batch = (%v, %v), want all-or-error", values, err)
+	}
+	if values, err := resolver.ResolveBatch(context.Background(), []SecretRef{"one", "one"}); err == nil || values != nil {
+		t.Fatalf("duplicate batch = (%v, %v), want refusal", values, err)
 	}
 }

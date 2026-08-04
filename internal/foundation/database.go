@@ -2,11 +2,17 @@ package foundation
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"net"
+	"net/url"
+	"strconv"
 	"time"
 
+	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 const (
@@ -19,49 +25,118 @@ const (
 var (
 	ErrDatabaseUnavailable = errors.New("database is unavailable")
 	ErrDatabaseTimezone    = errors.New("database session timezone is not UTC")
+	ErrDatabaseSession     = errors.New("database session settings are unsafe")
+	ErrDatabaseClockSkew   = errors.New("database clock exceeds the configured skew")
 	ErrSchemaBehind        = errors.New("database schema is behind the supported window")
 	ErrSchemaDirty         = errors.New("database schema migration is incomplete")
 	ErrSchemaAhead         = errors.New("database schema is ahead of the supported window")
 )
 
-type Database struct{ pool *pgxpool.Pool }
+type Database struct {
+	pool   *pgxpool.Pool
+	config DatabaseConfig
+}
 
-func OpenDatabase(ctx context.Context, config DatabaseConfig, resolver SecretResolver) (*Database, error) {
+func OpenDatabase(ctx context.Context, config DatabaseConfig, source SecretSource) (*Database, error) {
 	connectCtx, cancel := context.WithTimeout(ctx, config.ConnectTimeout)
 	defer cancel()
 
-	secret, err := resolver.Resolve(connectCtx, config.DSNRef)
+	values, err := source.ResolveBatch(connectCtx, []SecretRef{config.PasswordRef})
 	if err != nil {
 		return nil, ErrDatabaseUnavailable
 	}
-	dsn := secret.Bytes()
-	poolConfig, err := pgxpool.ParseConfig(string(dsn))
-	clear(dsn)
+	password, ok := values[config.PasswordRef]
+	if !ok {
+		return nil, ErrDatabaseUnavailable
+	}
+	poolConfig, err := databasePoolConfig(config, password)
 	if err != nil {
 		return nil, errors.New("database configuration is invalid")
-	}
-	poolConfig.MaxConns = config.MaxConnections
-	poolConfig.MaxConnIdleTime = 5 * time.Minute
-	poolConfig.MaxConnLifetime = time.Hour
-	poolConfig.HealthCheckPeriod = config.HealthCheckInterval
-	poolConfig.ConnConfig.ConnectTimeout = config.ConnectTimeout
-	poolConfig.AfterConnect = func(ctx context.Context, connection *pgx.Conn) error {
-		if _, err := connection.Exec(ctx, `SET TIME ZONE 'UTC'`); err != nil {
-			return err
-		}
-		_, err := connection.Exec(ctx, `SET search_path TO public`)
-		return err
 	}
 	pool, err := pgxpool.NewWithConfig(connectCtx, poolConfig)
 	if err != nil {
 		return nil, ErrDatabaseUnavailable
 	}
-	database := &Database{pool: pool}
+	database := &Database{pool: pool, config: config}
 	if err := database.Check(connectCtx); err != nil {
 		pool.Close()
 		return nil, err
 	}
 	return database, nil
+}
+
+func databasePoolConfig(config DatabaseConfig, password SecretValue) (*pgxpool.Config, error) {
+	query := url.Values{"sslmode": []string{config.TLSMode}}
+	if config.TLSRootCAFile != "" {
+		query.Set("sslrootcert", config.TLSRootCAFile)
+	}
+	connectionURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(config.User),
+		Host:     net.JoinHostPort(config.Host, strconv.Itoa(int(config.Port))),
+		Path:     config.Name,
+		RawQuery: query.Encode(),
+	}
+	poolConfig, err := pgxpool.ParseConfig(connectionURL.String())
+	if err != nil {
+		return nil, err
+	}
+	secret := password.Bytes()
+	poolConfig.ConnConfig.Password = string(secret)
+	clear(secret)
+	poolConfig.ConnConfig.ConnectTimeout = config.ConnectTimeout
+	poolConfig.ConnConfig.RuntimeParams["statement_timeout"] = strconv.FormatInt(config.StatementTimeout.Milliseconds(), 10)
+	poolConfig.MaxConns = config.MaxConnections
+	poolConfig.MaxConnIdleTime = 5 * time.Minute
+	poolConfig.MaxConnLifetime = time.Hour
+	poolConfig.HealthCheckPeriod = config.HealthCheckInterval
+	poolConfig.AfterConnect = databaseSessionInitializer(config.Role)
+	return poolConfig, nil
+}
+
+func OpenMigrationDatabase(ctx context.Context, config Config) (*sql.DB, error) {
+	source, err := buildSecretSource(ctx, config, clock.System{})
+	if err != nil {
+		return nil, ErrDatabaseUnavailable
+	}
+	values, err := source.ResolveBatch(ctx, []SecretRef{config.Database.PasswordRef})
+	if err != nil {
+		return nil, ErrDatabaseUnavailable
+	}
+	password, ok := values[config.Database.PasswordRef]
+	if !ok {
+		return nil, ErrDatabaseUnavailable
+	}
+	poolConfig, err := databasePoolConfig(config.Database, password)
+	if err != nil {
+		return nil, errors.New("database configuration is invalid")
+	}
+	database := stdlib.OpenDB(
+		*poolConfig.ConnConfig,
+		stdlib.OptionAfterConnect(databaseSessionInitializer(config.Database.Role)),
+	)
+	database.SetMaxOpenConns(int(config.Database.MaxConnections))
+	database.SetMaxIdleConns(int(config.Database.MaxConnections))
+	connectCtx, cancel := context.WithTimeout(ctx, config.Database.ConnectTimeout)
+	defer cancel()
+	if err := database.PingContext(connectCtx); err != nil {
+		_ = database.Close()
+		return nil, ErrDatabaseUnavailable
+	}
+	return database, nil
+}
+
+func databaseSessionInitializer(role string) func(context.Context, *pgx.Conn) error {
+	return func(ctx context.Context, connection *pgx.Conn) error {
+		if _, err := connection.Exec(ctx, `SET TIME ZONE 'UTC'`); err != nil {
+			return err
+		}
+		if _, err := connection.Exec(ctx, `SET search_path TO public`); err != nil {
+			return err
+		}
+		_, err := connection.Exec(ctx, "SET ROLE "+pgx.Identifier{role}.Sanitize())
+		return err
+	}
 }
 
 func (d *Database) Check(ctx context.Context) error {
@@ -71,12 +146,26 @@ func (d *Database) Check(ctx context.Context) error {
 	}
 	defer connection.Release()
 
-	var timezone string
-	if err := connection.QueryRow(ctx, `SELECT current_setting('TimeZone')`).Scan(&timezone); err != nil {
+	var timezone, sessionUser, currentRole string
+	var statementTimeoutMatches, tlsActive bool
+	err = connection.QueryRow(ctx, `
+SELECT
+    current_setting('TimeZone'),
+    session_user,
+    current_role,
+    current_setting('statement_timeout')::interval = ($1::bigint * interval '1 millisecond'),
+    COALESCE((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), FALSE)`,
+		d.config.StatementTimeout.Milliseconds(),
+	).Scan(&timezone, &sessionUser, &currentRole, &statementTimeoutMatches, &tlsActive)
+	if err != nil {
 		return ErrDatabaseUnavailable
 	}
 	if timezone != "UTC" {
 		return ErrDatabaseTimezone
+	}
+	wantTLS := d.config.TLSMode == DatabaseTLSVerifyFull
+	if sessionUser != d.config.User || currentRole != d.config.Role || !statementTimeoutMatches || tlsActive != wantTLS {
+		return ErrDatabaseSession
 	}
 
 	var exists bool
@@ -98,6 +187,24 @@ func (d *Database) Check(ctx context.Context) error {
 }
 
 func (d *Database) Close() { d.pool.Close() }
+
+func (d *Database) CheckClock(ctx context.Context, source clock.Clock, maximumSkew time.Duration) error {
+	before := source.Now()
+	var databaseTime time.Time
+	if err := d.pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&databaseTime); err != nil {
+		return ErrDatabaseUnavailable
+	}
+	after := source.Now()
+	midpoint := before.Add(after.Sub(before) / 2)
+	skew := databaseTime.UTC().Sub(midpoint)
+	if skew < 0 {
+		skew = -skew
+	}
+	if skew > maximumSkew {
+		return ErrDatabaseClockSkew
+	}
+	return nil
+}
 
 func ValidateSchemaState(version int64, dirty bool) error {
 	if dirty {

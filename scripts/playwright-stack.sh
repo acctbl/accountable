@@ -3,7 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-: "${ACCOUNTABLE_TEST_POSTGRES_DSN:?run through scripts/with-test-postgres.sh}"
+: "${ACCOUNTABLE_TEST_POSTGRES_HOST:?run through scripts/with-test-postgres.sh}"
+: "${ACCOUNTABLE_TEST_POSTGRES_PORT:?run through scripts/with-test-postgres.sh}"
+: "${ACCOUNTABLE_TEST_POSTGRES_DATABASE:?run through scripts/with-test-postgres.sh}"
+: "${ACCOUNTABLE_TEST_POSTGRES_USER:?run through scripts/with-test-postgres.sh}"
+: "${ACCOUNTABLE_TEST_POSTGRES_PASSWORD:?run through scripts/with-test-postgres.sh}"
 
 STACK_TLS_DIR="$(mktemp -d)"
 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
@@ -20,9 +24,9 @@ WEB_CONFIG="$STACK_TLS_DIR/web.toml"
 SECRETS_DIR="$STACK_TLS_DIR/secrets"
 STORAGE_DIR="$STACK_TLS_DIR/storage"
 mkdir -p "$SECRETS_DIR" "$STORAGE_DIR"
-printf '%s' "$ACCOUNTABLE_TEST_POSTGRES_DSN" >"$SECRETS_DIR/database.api_dsn"
+printf '%s' "$ACCOUNTABLE_TEST_POSTGRES_PASSWORD" >"$SECRETS_DIR/database.password"
 openssl rand -base64 32 >"$SECRETS_DIR/crypto.primary_key"
-chmod 0600 "$SECRETS_DIR/database.api_dsn" "$SECRETS_DIR/crypto.primary_key"
+chmod 0600 "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
 cat >"$API_CONFIG" <<EOF
 environment = "development"
 listen_address = "127.0.0.1:18080"
@@ -33,14 +37,25 @@ tls_certificate_file = "$STACK_TLS_DIR/cert.pem"
 tls_private_key_file = "$STACK_TLS_DIR/key.pem"
 unary_rpc_timeout = "10s"
 stream_rpc_timeout = "25s"
+foundation_check_timeout = "30s"
+
+[features]
+provider = "noop"
 
 [secrets]
 provider = "file"
 directory = "$SECRETS_DIR"
 
 [database]
-dsn_ref = "database.api_dsn"
+host = "$ACCOUNTABLE_TEST_POSTGRES_HOST"
+port = $ACCOUNTABLE_TEST_POSTGRES_PORT
+name = "$ACCOUNTABLE_TEST_POSTGRES_DATABASE"
+user = "$ACCOUNTABLE_TEST_POSTGRES_USER"
+role = "$ACCOUNTABLE_TEST_POSTGRES_USER"
+password_ref = "database.password"
+tls_mode = "disable"
 connect_timeout = "5s"
+statement_timeout = "10s"
 health_check_interval = "250ms"
 max_connections = 16
 timezone = "UTC"
@@ -52,17 +67,33 @@ root = "$STORAGE_DIR"
 [crypto]
 provider = "local"
 key_ref = "crypto.primary_key"
+
+[time]
+provider = "system"
+max_clock_error = "1s"
+max_database_skew = "5s"
 EOF
 cat >"$MIGRATE_CONFIG" <<EOF
 environment = "development"
+foundation_check_timeout = "30s"
+
+[features]
+provider = "noop"
 
 [secrets]
 provider = "file"
 directory = "$SECRETS_DIR"
 
 [database]
-dsn_ref = "database.api_dsn"
+host = "$ACCOUNTABLE_TEST_POSTGRES_HOST"
+port = $ACCOUNTABLE_TEST_POSTGRES_PORT
+name = "$ACCOUNTABLE_TEST_POSTGRES_DATABASE"
+user = "$ACCOUNTABLE_TEST_POSTGRES_USER"
+role = "$ACCOUNTABLE_TEST_POSTGRES_USER"
+password_ref = "database.password"
+tls_mode = "disable"
 connect_timeout = "5s"
+statement_timeout = "10s"
 health_check_interval = "250ms"
 max_connections = 16
 timezone = "UTC"
@@ -74,6 +105,11 @@ root = "$STORAGE_DIR"
 [crypto]
 provider = "local"
 key_ref = "crypto.primary_key"
+
+[time]
+provider = "system"
+max_clock_error = "1s"
+max_database_skew = "5s"
 EOF
 cat >"$WEB_CONFIG" <<EOF
 environment = "development"
@@ -98,7 +134,7 @@ cleanup() {
 	wait "$WEB_PID" 2>/dev/null || true
 	wait "$API_PID" 2>/dev/null || true
 	rm -f "$API_CONFIG" "$MIGRATE_CONFIG" "$WEB_CONFIG" "$STACK_TLS_DIR/cert.pem" "$STACK_TLS_DIR/key.pem"
-	rm -f "$SECRETS_DIR/database.api_dsn" "$SECRETS_DIR/crypto.primary_key"
+	rm -f "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
 	rmdir "$SECRETS_DIR" "$STORAGE_DIR" 2>/dev/null || true
 	rmdir "$STACK_TLS_DIR" 2>/dev/null || true
 }

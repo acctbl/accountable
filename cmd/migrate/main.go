@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"github.com/acctbl/accountable/internal/configfile"
 	"github.com/acctbl/accountable/internal/foundation"
 	"github.com/acctbl/accountable/internal/migration"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type fileConfig struct {
@@ -46,19 +44,9 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	resolver, err := foundation.NewFileSecretResolver(config.Secrets.Directory)
+	database, err := foundation.OpenMigrationDatabase(ctx, config)
 	if err != nil {
 		return err
-	}
-	secret, err := resolver.Resolve(ctx, config.Database.DSNRef)
-	if err != nil {
-		return errors.New("database secret is unavailable")
-	}
-	dsn := secret.Bytes()
-	database, err := sql.Open("pgx", string(dsn))
-	clear(dsn)
-	if err != nil {
-		return errors.New("database configuration is invalid")
 	}
 	defer func() { _ = database.Close() }()
 	return migration.Run(ctx, database, db.Migrations())

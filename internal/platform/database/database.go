@@ -19,8 +19,8 @@ import (
 const (
 	// MinimumSchemaVersion and MaximumSchemaVersion are compiled into the binary.
 	// Operators cannot widen this compatibility window through configuration.
-	MinimumSchemaVersion int64 = 1
-	MaximumSchemaVersion int64 = 1
+	MinimumSchemaVersion int64 = 20260801000000
+	MaximumSchemaVersion int64 = 20260801000000
 )
 
 var (

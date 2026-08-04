@@ -85,9 +85,16 @@ prove forbidden-timestamppb-now task lint
 rm -f "$BAD_TSPB_NOW"
 
 echo "==> negative: invalid migration"
-BAD_MIGRATION="internal/platform/database/migrations/99999_bad.sql"
+BAD_MIGRATION="internal/platform/database/migrations/20991231235959_negative_bad.sql"
 cp "testdata/negative/migrate/00001_bad.sql" "$BAD_MIGRATION"
 prove invalid-migration task migrations:check
+rm -f "$BAD_MIGRATION"
+
+echo "==> negative: invalid migration filename"
+BAD_MIGRATION_FILENAME="internal/platform/database/migrations/bad_filename.sql"
+cp "testdata/negative/migrate/bad_filename.sql" "$BAD_MIGRATION_FILENAME"
+prove invalid-migration-filename task migrations:check
+rm -f "$BAD_MIGRATION_FILENAME"
 
 echo "==> negative: missing translation"
 AR="apps/web/src/i18n/messages/ar.json"

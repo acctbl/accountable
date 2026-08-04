@@ -72,6 +72,12 @@ cp "testdata/negative/arch/bad_domain_http_import.go" "$BAD_DOMAIN_DIR/z_negativ
 prove domain-http-import task lint
 rm -rf "internal/modules/negativetest"
 
+echo "==> negative: module imports secret provider internals"
+BAD_MODULE_SECRET="internal/modules/probe/z_negative_secret_import.go"
+cp "testdata/negative/arch/bad_module_secret_import.go" "$BAD_MODULE_SECRET"
+prove module-secret-import task lint
+rm -f "$BAD_MODULE_SECRET"
+
 echo "==> negative: time.Now outside clock adapter"
 BAD_TIME_NOW="internal/server/z_negative_time_now.go"
 cp "testdata/negative/arch/bad_time_now.go" "$BAD_TIME_NOW"

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"time"
 
 	"github.com/acctbl/accountable/internal/platform/awsconfig"
@@ -120,7 +121,19 @@ func (d *Dependencies) Ping(ctx context.Context) error {
 		return err
 	}
 	if d.Database != nil {
-		return d.Database.Ping(ctx)
+		if err := d.Database.Ping(ctx); err != nil {
+			return err
+		}
+	}
+	if d.Storage != nil {
+		if err := d.Storage.Probe(ctx); err != nil {
+			return err
+		}
+	}
+	if d.Crypto != nil {
+		if err := d.Crypto.Probe(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -161,7 +174,11 @@ func buildCrypto(ctx context.Context, config Config, secrets secret.SecretSource
 		if !ok {
 			return nil, crypto.ErrCryptoUnavailable
 		}
-		return crypto.NewLocalCrypto(key)
+		keyPath := ""
+		if config.Secrets.Provider == secret.ProviderFile {
+			keyPath = filepath.Join(config.Secrets.Directory, filepath.FromSlash(string(config.Crypto.KeyRef)))
+		}
+		return crypto.NewLocalCrypto(key, keyPath)
 	}
 	awsCfg, err := awsconfig.LoadConfig(ctx, config.Crypto.Region)
 	if err != nil {

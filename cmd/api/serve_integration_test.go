@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -255,7 +256,7 @@ func TestArchitectureProbeGateAndRuntimeMiddlewareIntegration(t *testing.T) {
 		!integrationUUIDV7.MatchString(unavailableProblem.GetRequestId()) {
 		t.Fatalf("not-ready detail = %T %v, want correlated unavailable ProblemDetail", unavailableValue, unavailableValue)
 	}
-	readyResponse, err := enabledServer.Client().Get(enabledServer.URL + "/ready")
+	readyResponse, err := enabledServer.Client().Get(enabledServer.URL + "/_health/ready")
 	if err != nil {
 		t.Fatalf("readiness: %v", err)
 	}
@@ -263,12 +264,31 @@ func TestArchitectureProbeGateAndRuntimeMiddlewareIntegration(t *testing.T) {
 	if readyResponse.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("readiness status = %d", readyResponse.StatusCode)
 	}
-	liveResponse, err := enabledServer.Client().Get(enabledServer.URL + "/live")
+	liveResponse, err := enabledServer.Client().Get(enabledServer.URL + "/_health/live")
 	if err != nil {
 		t.Fatalf("liveness: %v", err)
 	}
-	_ = liveResponse.Body.Close()
 	if liveResponse.StatusCode != http.StatusOK {
 		t.Fatalf("liveness status = %d", liveResponse.StatusCode)
+	}
+	var liveBody map[string]string
+	if err := json.NewDecoder(liveResponse.Body).Decode(&liveBody); err != nil {
+		t.Fatalf("decode liveness body: %v", err)
+	}
+	_ = liveResponse.Body.Close()
+	if len(liveBody) != 3 || liveBody["status"] != "ok" || liveBody["release_id"] != "dev" ||
+		!integrationUUIDV7.MatchString(liveBody["request_id"]) ||
+		liveResponse.Header.Get("X-Request-ID") != liveBody["request_id"] {
+		t.Fatalf("liveness body or headers = (%v, %v)", liveBody, liveResponse.Header)
+	}
+	for _, oldPath := range []string{"/live", "/ready"} {
+		response, requestErr := enabledServer.Client().Get(enabledServer.URL + oldPath)
+		if requestErr != nil {
+			t.Fatalf("old health path %s: %v", oldPath, requestErr)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("old health path %s status = %d, want 404", oldPath, response.StatusCode)
+		}
 	}
 }

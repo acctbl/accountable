@@ -8,12 +8,27 @@ import (
 	"testing"
 
 	esdktypes "github.com/aws/aws-encryption-sdk/releases/go/encryption-sdk/awscryptographyencryptionsdksmithygeneratedtypes"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
 
 type fakeEncryptionEngine struct {
 	fail   bool
 	tamper bool
 	prefix []byte
+}
+
+type fakeKMS struct {
+	enabled bool
+	state   types.KeyState
+	err     error
+}
+
+func (f fakeKMS) DescribeKey(context.Context, *kms.DescribeKeyInput, ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &kms.DescribeKeyOutput{KeyMetadata: &types.KeyMetadata{Enabled: f.enabled, KeyState: f.state}}, nil
 }
 
 func (f fakeEncryptionEngine) Encrypt(_ context.Context, plaintext []byte) ([]byte, error) {
@@ -126,5 +141,24 @@ func TestAWSCryptoUsesConfiguredEncryptionContextPrefix(t *testing.T) {
 	}
 	if err := newAWSCrypto(engine).Check(context.Background()); err != nil {
 		t.Fatalf("Check: %v", err)
+	}
+}
+
+func TestAWSCryptoProbeRequiresEnabledKey(t *testing.T) {
+	t.Parallel()
+
+	for name, client := range map[string]fakeKMS{
+		"disabled":         {enabled: false, state: types.KeyStateDisabled},
+		"pending deletion": {enabled: true, state: types.KeyStatePendingDeletion},
+		"provider failure": {err: errors.New("KMS unavailable")},
+	} {
+		cryptor := &AWSCrypto{kms: client, keyID: "key-id"}
+		if err := cryptor.Probe(context.Background()); !errors.Is(err, ErrCryptoUnavailable) {
+			t.Errorf("%s: Probe = %v, want crypto unavailable", name, err)
+		}
+	}
+	cryptor := &AWSCrypto{kms: fakeKMS{enabled: true, state: types.KeyStateEnabled}, keyID: "key-id"}
+	if err := cryptor.Probe(context.Background()); err != nil {
+		t.Fatalf("enabled key Probe: %v", err)
 	}
 }

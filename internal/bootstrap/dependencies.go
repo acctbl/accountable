@@ -94,6 +94,13 @@ func (d *Dependencies) Check(ctx context.Context) error {
 	return nil
 }
 
+func (d *Dependencies) Ping(ctx context.Context) error {
+	if err := d.timeHealth.Check(ctx); err != nil {
+		return err
+	}
+	return d.Database.Ping(ctx)
+}
+
 func (d *Dependencies) Close() { d.Database.Close() }
 
 func Preflight(ctx context.Context, config Config) (PreflightReport, error) {

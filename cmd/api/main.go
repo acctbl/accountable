@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,5 +24,10 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	log.Printf(
+		"configuration loaded environment=%s cell=%s role=%s revision=%s fingerprint=%s",
+		config.Foundation.Environment, config.Foundation.CellID, config.Foundation.RuntimeRole,
+		config.Foundation.Revision, config.Foundation.Fingerprint,
+	)
 	return serve(ctx, config)
 }

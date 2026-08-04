@@ -19,7 +19,6 @@ import (
 	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/acctbl/accountable/internal/platform/crypto"
 	platformdb "github.com/acctbl/accountable/internal/platform/database"
-	"github.com/acctbl/accountable/internal/platform/features"
 	"github.com/acctbl/accountable/internal/platform/secret"
 	"github.com/acctbl/accountable/internal/platform/storage"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -116,11 +115,13 @@ func TestPostgresIntegrationRefusalMatrix(t *testing.T) {
 	dependencies, err := bootstrap.Build(ctx, bootstrap.Config{
 		Environment:  "development",
 		CheckTimeout: 30 * time.Second,
-		Features:     features.Config{Provider: features.ProviderNoop},
-		Secrets:      secret.Config{Provider: secret.ProviderFile, Directory: secretDirectory},
-		Database:     databaseConfig,
-		Storage:      storage.Config{Provider: storage.ProviderFile, Root: storageDirectory},
-		Crypto:       crypto.Config{Provider: crypto.ProviderLocal, KeyRef: secret.Ref("crypto.key")},
+		Capabilities: bootstrap.Capabilities{
+			Postgres: true, Secrets: true, KMS: true, ObjectStorage: true,
+		},
+		Secrets:  secret.Config{Provider: secret.ProviderFile, Directory: secretDirectory},
+		Database: databaseConfig,
+		Storage:  storage.Config{Provider: storage.ProviderFile, Root: storageDirectory},
+		Crypto:   crypto.Config{Provider: crypto.ProviderLocal, KeyRef: secret.Ref("crypto.key")},
 		Time: bootstrap.TimeConfig{
 			Provider: bootstrap.TimeProviderSystem, MaxClockError: time.Second, MaxDatabaseSkew: 5 * time.Second,
 		},

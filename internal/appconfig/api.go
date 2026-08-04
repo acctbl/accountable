@@ -30,9 +30,11 @@ type API struct {
 
 type APIFile struct {
 	bootstrap.FileConfig
-	Environment       string   `toml:"environment"`
+	Server *ServerFileConfig `toml:"server"`
+}
+
+type ServerFileConfig struct {
 	ListenAddress     string   `toml:"listen_address"`
-	ArchitectureProbe *bool    `toml:"architecture_probe"`
 	AllowedOrigins    []string `toml:"allowed_origins"`
 	TrustedProxyCIDRs []string `toml:"trusted_proxy_cidrs"`
 	TLSCertificate    string   `toml:"tls_certificate_file"`
@@ -42,80 +44,111 @@ type APIFile struct {
 }
 
 func LoadAPI(args []string) (API, error) {
-	path, err := configfile.AbsolutePath(args)
+	raw, foundationConfig, err := loadRuntime(args, bootstrap.RuntimeRoleAPI)
 	if err != nil {
 		return API{}, err
 	}
-	var raw APIFile
-	if err := configfile.Decode(path, &raw); err != nil {
+	return parseAPI(raw, foundationConfig)
+}
+
+func parseAPI(raw APIFile, foundationConfig bootstrap.Config) (API, error) {
+	server := raw.Server
+	if server == nil {
+		return API{}, errors.New("server section is required when runtime_role is api")
+	}
+	if server.ListenAddress == "" {
+		return API{}, errors.New("server.listen_address is required")
+	}
+	if _, _, err := net.SplitHostPort(server.ListenAddress); err != nil {
+		return API{}, fmt.Errorf("server.listen_address: %w", err)
+	}
+	if server.AllowedOrigins == nil {
+		return API{}, errors.New("server.allowed_origins is required")
+	}
+	if err := validateAllowedOrigins(foundationConfig.Environment, server.AllowedOrigins); err != nil {
 		return API{}, err
 	}
-	if raw.Environment != "development" && raw.Environment != "staging" && raw.Environment != "production" {
-		return API{}, errors.New("environment must be development, staging, or production")
+	if server.TrustedProxyCIDRs == nil {
+		return API{}, errors.New("server.trusted_proxy_cidrs is required")
 	}
-	if raw.ListenAddress == "" {
-		return API{}, errors.New("listen_address is required")
+	if (server.TLSCertificate == "") != (server.TLSPrivateKey == "") {
+		return API{}, errors.New("server.tls_certificate_file and server.tls_private_key_file must be configured together")
 	}
-	if _, _, err := net.SplitHostPort(raw.ListenAddress); err != nil {
-		return API{}, fmt.Errorf("listen_address: %w", err)
+	if server.TLSCertificate != "" && !filepath.IsAbs(server.TLSCertificate) {
+		return API{}, errors.New("server.tls_certificate_file must be an absolute path")
 	}
-	if raw.ArchitectureProbe == nil {
-		return API{}, errors.New("architecture_probe is required")
+	if server.TLSPrivateKey != "" && !filepath.IsAbs(server.TLSPrivateKey) {
+		return API{}, errors.New("server.tls_private_key_file must be an absolute path")
 	}
-	if raw.AllowedOrigins == nil {
-		return API{}, errors.New("allowed_origins is required")
-	}
-	if err := validateAllowedOrigins(raw.Environment, raw.AllowedOrigins); err != nil {
-		return API{}, err
-	}
-	if raw.TrustedProxyCIDRs == nil {
-		return API{}, errors.New("trusted_proxy_cidrs is required")
-	}
-	if raw.Environment == "production" && *raw.ArchitectureProbe {
-		return API{}, errors.New("production preflight: architecture_probe must be false")
-	}
-	if (raw.TLSCertificate == "") != (raw.TLSPrivateKey == "") {
-		return API{}, errors.New("tls_certificate_file and tls_private_key_file must be configured together")
-	}
-	if raw.TLSCertificate != "" && !filepath.IsAbs(raw.TLSCertificate) {
-		return API{}, errors.New("tls_certificate_file must be an absolute path")
-	}
-	if raw.TLSPrivateKey != "" && !filepath.IsAbs(raw.TLSPrivateKey) {
-		return API{}, errors.New("tls_private_key_file must be an absolute path")
-	}
-	if raw.TLSCertificate != "" {
-		if _, err := tls.LoadX509KeyPair(raw.TLSCertificate, raw.TLSPrivateKey); err != nil {
+	if server.TLSCertificate != "" {
+		if _, err := tls.LoadX509KeyPair(server.TLSCertificate, server.TLSPrivateKey); err != nil {
 			return API{}, errors.New("TLS identity is unavailable")
 		}
 	}
-	unaryDeadline, err := positiveDuration("unary_rpc_timeout", raw.UnaryRPCTimeout)
+	unaryDeadline, err := positiveDuration("server.unary_rpc_timeout", server.UnaryRPCTimeout)
 	if err != nil {
 		return API{}, err
 	}
-	streamDeadline, err := positiveDuration("stream_rpc_timeout", raw.StreamRPCTimeout)
+	streamDeadline, err := positiveDuration("server.stream_rpc_timeout", server.StreamRPCTimeout)
 	if err != nil {
 		return API{}, err
 	}
 	if unaryDeadline >= HTTPWriteTimeout {
-		return API{}, errors.New("unary_rpc_timeout must be shorter than the HTTP write timeout")
+		return API{}, errors.New("server.unary_rpc_timeout must be shorter than the HTTP write timeout")
 	}
 	if streamDeadline >= HTTPWriteTimeout {
-		return API{}, errors.New("stream_rpc_timeout must be shorter than the HTTP write timeout")
+		return API{}, errors.New("server.stream_rpc_timeout must be shorter than the HTTP write timeout")
 	}
-	trusted, err := parseCIDRs(raw.TrustedProxyCIDRs)
+	trusted, err := parseCIDRs(server.TrustedProxyCIDRs)
 	if err != nil {
-		return API{}, fmt.Errorf("trusted_proxy_cidrs: %w", err)
-	}
-	foundationConfig, err := bootstrap.Parse(raw.Environment, path, raw.FileConfig)
-	if err != nil {
-		return API{}, err
+		return API{}, fmt.Errorf("server.trusted_proxy_cidrs: %w", err)
 	}
 	return API{
-		Addr: raw.ListenAddress, Environment: raw.Environment, ArchitectureProbe: *raw.ArchitectureProbe,
-		AllowedOrigins: raw.AllowedOrigins, TrustedProxies: trusted,
-		TLSCertFile: raw.TLSCertificate, TLSKeyFile: raw.TLSPrivateKey,
+		Addr: server.ListenAddress, Environment: foundationConfig.Environment,
+		ArchitectureProbe: foundationConfig.Capabilities.ArchitectureProbe,
+		AllowedOrigins:    server.AllowedOrigins, TrustedProxies: trusted,
+		TLSCertFile: server.TLSCertificate, TLSKeyFile: server.TLSPrivateKey,
 		UnaryRPCDeadline: unaryDeadline, StreamRPCDeadline: streamDeadline, Foundation: foundationConfig,
 	}, nil
+}
+
+func LoadFoundation(args []string, expectedRole string) (bootstrap.Config, error) {
+	raw, config, err := loadRuntime(args, expectedRole)
+	if err == nil && expectedRole == "" && config.RuntimeRole == bootstrap.RuntimeRoleAPI {
+		apiConfig, apiErr := parseAPI(raw, config)
+		if apiErr != nil {
+			return bootstrap.Config{}, apiErr
+		}
+		return apiConfig.Foundation, nil
+	}
+	return config, err
+}
+
+func loadRuntime(args []string, expectedRole string) (APIFile, bootstrap.Config, error) {
+	path, err := configfile.AbsolutePath(args)
+	if err != nil {
+		return APIFile{}, bootstrap.Config{}, err
+	}
+	var raw APIFile
+	fingerprint, err := configfile.DecodeWithFingerprint(path, &raw)
+	if err != nil {
+		return APIFile{}, bootstrap.Config{}, err
+	}
+	foundationConfig, err := bootstrap.Parse(path, fingerprint, raw.FileConfig)
+	if err != nil {
+		return APIFile{}, bootstrap.Config{}, err
+	}
+	if expectedRole != "" && foundationConfig.RuntimeRole != expectedRole {
+		return APIFile{}, bootstrap.Config{}, fmt.Errorf("runtime_role must be %s for this binary", expectedRole)
+	}
+	if foundationConfig.RuntimeRole == bootstrap.RuntimeRoleMigrate &&
+		(!foundationConfig.Capabilities.Secrets || !foundationConfig.Capabilities.Postgres) {
+		return APIFile{}, bootstrap.Config{}, errors.New("runtime_role migrate requires secrets and postgres capabilities")
+	}
+	if foundationConfig.RuntimeRole != bootstrap.RuntimeRoleAPI && raw.Server != nil {
+		return APIFile{}, bootstrap.Config{}, errors.New("server section is only valid when runtime_role is api")
+	}
+	return raw, foundationConfig, nil
 }
 
 func validateAllowedOrigins(environment string, values []string) error {

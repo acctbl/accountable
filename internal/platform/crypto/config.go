@@ -8,8 +8,9 @@ const (
 )
 
 type Config struct {
-	Provider  string
-	KeyRef    secret.Ref
-	Region    string
-	KMSKeyARN string
+	Provider                string
+	KeyRef                  secret.Ref
+	Region                  string
+	KMSKeyARN               string
+	EncryptionContextPrefix string
 }

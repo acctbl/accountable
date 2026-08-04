@@ -43,7 +43,9 @@ func NewAWSCrypto(ctx context.Context, config Config, awsConfig aws.Config) (*AW
 	if err != nil {
 		return nil, ErrCryptoUnavailable
 	}
-	return newAWSCrypto(&awsEncryptionEngine{client: client, keyring: keyring}), nil
+	return newAWSCrypto(&awsEncryptionEngine{
+		client: client, keyring: keyring, encryptionContextPrefix: config.EncryptionContextPrefix,
+	}), nil
 }
 
 func newAWSCrypto(engine encryptionEngine) *AWSCrypto { return &AWSCrypto{engine: engine} }
@@ -101,13 +103,14 @@ type encryptionSDKAPI interface {
 }
 
 type awsEncryptionEngine struct {
-	client  encryptionSDKAPI
-	keyring mpltypes.IKeyring
+	client                  encryptionSDKAPI
+	keyring                 mpltypes.IKeyring
+	encryptionContextPrefix string
 }
 
 func (e *awsEncryptionEngine) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
 	output, err := e.client.Encrypt(ctx, esdktypes.EncryptInput{
-		Plaintext: plaintext, EncryptionContext: encryptionContext(), Keyring: e.keyring,
+		Plaintext: plaintext, EncryptionContext: encryptionContext(e.encryptionContextPrefix), Keyring: e.keyring,
 	})
 	if err != nil || output == nil {
 		return nil, ErrCryptoUnavailable
@@ -116,7 +119,7 @@ func (e *awsEncryptionEngine) Encrypt(ctx context.Context, plaintext []byte) ([]
 }
 
 func (e *awsEncryptionEngine) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error) {
-	wantContext := encryptionContext()
+	wantContext := encryptionContext(e.encryptionContextPrefix)
 	output, err := e.client.Decrypt(ctx, esdktypes.DecryptInput{
 		Ciphertext: ciphertext, EncryptionContext: wantContext, Keyring: e.keyring,
 	})
@@ -126,8 +129,14 @@ func (e *awsEncryptionEngine) Decrypt(ctx context.Context, ciphertext []byte) ([
 	return output.Plaintext, nil
 }
 
-func encryptionContext() map[string]string {
-	return map[string]string{"application": "accountable", "purpose": "foundation"}
+func encryptionContext(prefix string) map[string]string {
+	if prefix == "" {
+		prefix = "accountable.foundation"
+	}
+	return map[string]string{
+		prefix + ".application": "accountable",
+		prefix + ".purpose":     "foundation",
+	}
 }
 
 // Signed algorithm suites add reserved pairs such as aws-crypto-public-key to

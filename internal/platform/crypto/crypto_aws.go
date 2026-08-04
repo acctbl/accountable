@@ -120,7 +120,7 @@ func (e *awsEncryptionEngine) Decrypt(ctx context.Context, ciphertext []byte) ([
 	output, err := e.client.Decrypt(ctx, esdktypes.DecryptInput{
 		Ciphertext: ciphertext, EncryptionContext: wantContext, Keyring: e.keyring,
 	})
-	if err != nil || output == nil || !sameEncryptionContext(output.EncryptionContext, wantContext) {
+	if err != nil || output == nil || !includesEncryptionContext(output.EncryptionContext, wantContext) {
 		return nil, ErrCryptoUnavailable
 	}
 	return output.Plaintext, nil
@@ -130,10 +130,9 @@ func encryptionContext() map[string]string {
 	return map[string]string{"application": "accountable", "purpose": "foundation"}
 }
 
-func sameEncryptionContext(got, want map[string]string) bool {
-	if len(got) != len(want) {
-		return false
-	}
+// Signed algorithm suites add reserved pairs such as aws-crypto-public-key to
+// the stored context, so the requested pairs must be verified by inclusion.
+func includesEncryptionContext(got, want map[string]string) bool {
 	for key, value := range want {
 		if got[key] != value {
 			return false

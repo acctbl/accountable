@@ -1,4 +1,4 @@
-package server_test
+package system_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	systemv1 "github.com/acctbl/accountable/gen/go/accountable/system/v1"
 	"github.com/acctbl/accountable/gen/go/accountable/system/v1/systemv1connect"
+	"github.com/acctbl/accountable/internal/modules/system"
 	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/acctbl/accountable/internal/server"
 )
@@ -26,7 +27,7 @@ func TestSystemServiceGetRuntimeIntegration(t *testing.T) {
 
 	mux := http.NewServeMux()
 	path, handler := systemv1connect.NewSystemServiceHandler(
-		server.NewSystemServer(clock.Fixed{Instant: want}),
+		system.NewSystemServer(clock.Fixed{Instant: want}),
 		connect.WithInterceptors(server.BoundaryInterceptor{}),
 	)
 	mux.Handle(path, handler)

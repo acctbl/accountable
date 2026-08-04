@@ -236,6 +236,25 @@ func TestArchitectureProbeGateAndRuntimeMiddlewareIntegration(t *testing.T) {
 	}
 
 	ready.Set(false)
+	systemClient := systemv1connect.NewSystemServiceClient(enabledServer.Client(), enabledServer.URL)
+	_, unavailableErr := systemClient.GetRuntime(context.Background(), connect.NewRequest(&systemv1.GetRuntimeRequest{}))
+	var unavailableConnectErr *connect.Error
+	if !errors.As(unavailableErr, &unavailableConnectErr) || unavailableConnectErr.Code() != connect.CodeUnavailable {
+		t.Fatalf("not-ready RPC error = %v, want unavailable", unavailableErr)
+	}
+	if len(unavailableConnectErr.Details()) != 1 {
+		t.Fatalf("not-ready RPC details = %d, want ProblemDetail", len(unavailableConnectErr.Details()))
+	}
+	unavailableValue, unavailableValueErr := unavailableConnectErr.Details()[0].Value()
+	if unavailableValueErr != nil {
+		t.Fatalf("decode not-ready ProblemDetail: %v", unavailableValueErr)
+	}
+	unavailableProblem, ok := unavailableValue.(*errorv1.ProblemDetail)
+	if !ok || unavailableProblem.GetCode() != "unavailable" ||
+		!integrationUUIDV7.MatchString(unavailableProblem.GetProblemId()) ||
+		!integrationUUIDV7.MatchString(unavailableProblem.GetRequestId()) {
+		t.Fatalf("not-ready detail = %T %v, want correlated unavailable ProblemDetail", unavailableValue, unavailableValue)
+	}
 	readyResponse, err := enabledServer.Client().Get(enabledServer.URL + "/ready")
 	if err != nil {
 		t.Fatalf("readiness: %v", err)

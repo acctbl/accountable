@@ -20,4 +20,4 @@ trivy config \
 	--severity HIGH,CRITICAL \
 	--exit-code 1 \
 	--ignorefile "$IGNORE" \
-	infra
+	infra/opentofu

@@ -27,7 +27,9 @@ type S3Storage struct {
 }
 
 func NewS3Storage(config Config, awsConfig aws.Config) *S3Storage {
-	return newS3Storage(config, s3.NewFromConfig(awsConfig))
+	return newS3Storage(config, s3.NewFromConfig(awsConfig, func(options *s3.Options) {
+		options.UsePathStyle = awsConfig.BaseEndpoint != nil
+	}))
 }
 
 func newS3Storage(config Config, client s3API) *S3Storage {

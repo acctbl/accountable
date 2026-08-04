@@ -11,6 +11,7 @@ import (
 	esdktypes "github.com/aws/aws-encryption-sdk/releases/go/encryption-sdk/awscryptographyencryptionsdksmithygeneratedtypes"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
 
 const managedCryptoOperationTimeout = 10 * time.Second
@@ -20,15 +21,24 @@ type encryptionEngine interface {
 	Decrypt(context.Context, []byte) ([]byte, error)
 }
 
-type AWSCrypto struct{ engine encryptionEngine }
+type kmsAPI interface {
+	DescribeKey(context.Context, *kms.DescribeKeyInput, ...func(*kms.Options)) (*kms.DescribeKeyOutput, error)
+}
+
+type AWSCrypto struct {
+	engine encryptionEngine
+	kms    kmsAPI
+	keyID  string
+}
 
 func NewAWSCrypto(ctx context.Context, config Config, awsConfig aws.Config) (*AWSCrypto, error) {
 	materials, err := mpl.NewClient(mpltypes.MaterialProvidersConfig{})
 	if err != nil {
 		return nil, ErrCryptoUnavailable
 	}
+	kmsClient := kms.NewFromConfig(awsConfig)
 	keyring, err := materials.CreateAwsKmsKeyring(ctx, mpltypes.CreateAwsKmsKeyringInput{
-		KmsClient: kms.NewFromConfig(awsConfig),
+		KmsClient: kmsClient,
 		KmsKeyId:  config.KMSKeyARN,
 	})
 	if err != nil {
@@ -43,9 +53,12 @@ func NewAWSCrypto(ctx context.Context, config Config, awsConfig aws.Config) (*AW
 	if err != nil {
 		return nil, ErrCryptoUnavailable
 	}
-	return newAWSCrypto(&awsEncryptionEngine{
-		client: client, keyring: keyring, encryptionContextPrefix: config.EncryptionContextPrefix,
-	}), nil
+	return &AWSCrypto{
+		engine: &awsEncryptionEngine{
+			client: client, keyring: keyring, encryptionContextPrefix: config.EncryptionContextPrefix,
+		},
+		kms: kmsClient, keyID: config.KMSKeyARN,
+	}, nil
 }
 
 func newAWSCrypto(engine encryptionEngine) *AWSCrypto { return &AWSCrypto{engine: engine} }
@@ -70,6 +83,18 @@ func (c *AWSCrypto) Check(ctx context.Context) error {
 	}
 	opened, err := c.open(ctx, sealed)
 	if err != nil || !bytes.Equal(opened, want) {
+		return ErrCryptoUnavailable
+	}
+	return nil
+}
+
+func (c *AWSCrypto) Probe(ctx context.Context) error {
+	if c.kms == nil || c.keyID == "" {
+		return ErrCryptoUnavailable
+	}
+	output, err := c.kms.DescribeKey(ctx, &kms.DescribeKeyInput{KeyId: aws.String(c.keyID)})
+	if err != nil || output == nil || output.KeyMetadata == nil ||
+		!output.KeyMetadata.Enabled || output.KeyMetadata.KeyState != types.KeyStateEnabled {
 		return ErrCryptoUnavailable
 	}
 	return nil

@@ -14,13 +14,14 @@ import (
 )
 
 type fakeS3 struct {
-	public    bool
-	keyARN    string
-	object    []byte
-	deleted   bool
-	putErr    error
-	deleteErr error
-	putKey    string
+	public           bool
+	keyARN           string
+	object           []byte
+	deleted          bool
+	putErr           error
+	deleteErr        error
+	putKey           string
+	encryptionChecks int
 }
 
 func (f *fakeS3) GetPublicAccessBlock(context.Context, *s3.GetPublicAccessBlockInput, ...func(*s3.Options)) (*s3.GetPublicAccessBlockOutput, error) {
@@ -31,6 +32,7 @@ func (f *fakeS3) GetPublicAccessBlock(context.Context, *s3.GetPublicAccessBlockI
 }
 
 func (f *fakeS3) GetBucketEncryption(context.Context, *s3.GetBucketEncryptionInput, ...func(*s3.Options)) (*s3.GetBucketEncryptionOutput, error) {
+	f.encryptionChecks++
 	return &s3.GetBucketEncryptionOutput{ServerSideEncryptionConfiguration: &types.ServerSideEncryptionConfiguration{
 		Rules: []types.ServerSideEncryptionRule{{ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
 			SSEAlgorithm: types.ServerSideEncryptionAwsKms, KMSMasterKeyID: aws.String(f.keyARN),
@@ -77,6 +79,19 @@ func TestS3StoragePreflightProvesPrivateKMSRoundTripAndCleanup(t *testing.T) {
 	}
 	if !strings.Contains(client.putKey, "/.accountable-preflight/foundation-proof/") {
 		t.Fatalf("preflight key = %q, want access purpose", client.putKey)
+	}
+}
+
+func TestS3StorageProbeChecksOnlyPublicAccessBlock(t *testing.T) {
+	t.Parallel()
+
+	config := managedConfig()
+	client := &fakeS3{public: true, keyARN: config.KMSKeyARN}
+	if err := newS3Storage(config, client).Probe(context.Background()); err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if client.encryptionChecks != 0 || client.object != nil {
+		t.Fatalf("Probe performed expensive work: encryption=%d object=%q", client.encryptionChecks, client.object)
 	}
 }
 

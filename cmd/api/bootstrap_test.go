@@ -13,10 +13,10 @@ import (
 	"github.com/acctbl/accountable/internal/platform/database"
 )
 
-type stubDependencies struct{ unavailable atomic.Bool }
+type stubDependencies struct{ unavailable atomic.Int32 }
 
 func (d *stubDependencies) Ping(context.Context) error {
-	if d.unavailable.Load() {
+	if d.unavailable.Load() != 0 {
 		return database.ErrDatabaseUnavailable
 	}
 	return nil
@@ -66,7 +66,7 @@ func TestRunningAPIDropsAndRecoversReadinessWithoutExiting(t *testing.T) {
 			Foundation: bootstrap.Config{Database: database.Config{
 				HealthCheckInterval: 5 * time.Millisecond,
 				ConnectTimeout:      50 * time.Millisecond,
-			}, CheckTimeout: 50 * time.Millisecond},
+			}, CheckTimeout: 50 * time.Millisecond, ReadinessProbeInterval: 5 * time.Millisecond},
 		}, dependencies)
 	}()
 	t.Cleanup(func() {
@@ -79,15 +79,17 @@ func TestRunningAPIDropsAndRecoversReadinessWithoutExiting(t *testing.T) {
 	})
 
 	assertReadinessStatus(t, address, http.StatusOK)
-	dependencies.unavailable.Store(true)
-	assertReadinessStatus(t, address, http.StatusServiceUnavailable)
-	select {
-	case err := <-done:
-		t.Fatalf("API exited after a recoverable dependency failure: %v", err)
-	default:
+	for _, capability := range []int32{1, 2, 3} {
+		dependencies.unavailable.Store(capability)
+		assertReadinessStatus(t, address, http.StatusServiceUnavailable)
+		select {
+		case err := <-done:
+			t.Fatalf("API exited after recoverable capability failure %d: %v", capability, err)
+		default:
+		}
+		dependencies.unavailable.Store(0)
+		assertReadinessStatus(t, address, http.StatusOK)
 	}
-	dependencies.unavailable.Store(false)
-	assertReadinessStatus(t, address, http.StatusOK)
 }
 
 func assertReadinessStatus(t *testing.T, address string, want int) {
@@ -95,7 +97,7 @@ func assertReadinessStatus(t *testing.T, address string, want int) {
 	client := &http.Client{Timeout: 100 * time.Millisecond}
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		response, err := client.Get("http://" + address + "/ready")
+		response, err := client.Get("http://" + address + "/_health/ready")
 		if err == nil {
 			_ = response.Body.Close()
 			if response.StatusCode == want {
@@ -104,5 +106,5 @@ func assertReadinessStatus(t *testing.T, address string, want int) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("/ready did not reach status %d", want)
+	t.Fatalf("/_health/ready did not reach status %d", want)
 }

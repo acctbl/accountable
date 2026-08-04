@@ -26,26 +26,54 @@ mkdir -p "$SECRETS_DIR" "$STORAGE_DIR"
 printf '%s' "$ACCOUNTABLE_TEST_POSTGRES_PASSWORD" >"$SECRETS_DIR/database.password"
 openssl rand -base64 32 >"$SECRETS_DIR/crypto.primary_key"
 chmod 0600 "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
-cat >"$API_CONFIG" <<EOF
+write_foundation() {
+	local role="$1"
+	cat <<EOF
+schema_version = 1
+revision = "playwright"
 environment = "development"
+cell_id = "local"
+aws_region = "eu-west-2"
+runtime_role = "$role"
+foundation_check_timeout = "30s"
+readiness_probe_interval = "250ms"
+
+[capabilities]
+architecture_probe = $([ "$role" = "api" ] && printf true || printf false)
+postgres = true
+secrets = true
+kms = true
+object_storage = true
+telemetry = false
+redpanda = false
+EOF
+}
+
+{
+	write_foundation api
+	cat <<EOF
+
+[server]
 listen_address = "127.0.0.1:18080"
-architecture_probe = true
 allowed_origins = ["https://127.0.0.1:4173"]
 trusted_proxy_cidrs = ["127.0.0.1/32", "::1/128"]
 tls_certificate_file = "$STACK_TLS_DIR/cert.pem"
 tls_private_key_file = "$STACK_TLS_DIR/key.pem"
 unary_rpc_timeout = "10s"
 stream_rpc_timeout = "25s"
-foundation_check_timeout = "30s"
+EOF
+} >"$API_CONFIG"
 
-[features]
-provider = "noop"
+write_foundation migrate >"$MIGRATE_CONFIG"
+
+for config in "$API_CONFIG" "$MIGRATE_CONFIG"; do
+	cat >>"$config" <<EOF
 
 [secrets]
 provider = "file"
 directory = "$SECRETS_DIR"
 
-[database]
+[postgres]
 host = "$ACCOUNTABLE_TEST_POSTGRES_HOST"
 port = $ACCOUNTABLE_TEST_POSTGRES_PORT
 name = "$ACCOUNTABLE_TEST_POSTGRES_DATABASE"
@@ -59,61 +87,59 @@ health_check_interval = "250ms"
 max_connections = 16
 timezone = "UTC"
 
-[storage]
+[object_storage]
 provider = "filesystem"
 root = "$STORAGE_DIR"
+access_purpose = "foundation-proof"
 
-[crypto]
+[kms]
 provider = "local"
 key_ref = "crypto.primary_key"
+encryption_context_prefix = "accountable.foundation"
 
 [time]
 provider = "system"
 max_clock_error = "1s"
 max_database_skew = "5s"
 EOF
-cat >"$MIGRATE_CONFIG" <<EOF
-environment = "development"
-foundation_check_timeout = "30s"
-
-[features]
-provider = "noop"
-
-[secrets]
-provider = "file"
-directory = "$SECRETS_DIR"
-
-[database]
-host = "$ACCOUNTABLE_TEST_POSTGRES_HOST"
-port = $ACCOUNTABLE_TEST_POSTGRES_PORT
-name = "$ACCOUNTABLE_TEST_POSTGRES_DATABASE"
-user = "$ACCOUNTABLE_TEST_POSTGRES_USER"
-role = "$ACCOUNTABLE_TEST_POSTGRES_USER"
-password_ref = "database.password"
-tls_mode = "disable"
-connect_timeout = "5s"
-statement_timeout = "10s"
-health_check_interval = "250ms"
-max_connections = 16
-timezone = "UTC"
-
-[storage]
-provider = "filesystem"
-root = "$STORAGE_DIR"
-
-[crypto]
-provider = "local"
-key_ref = "crypto.primary_key"
-
-[time]
-provider = "system"
-max_clock_error = "1s"
-max_database_skew = "5s"
-EOF
+done
 
 mise exec -- go run ./cmd/migrate --config "$MIGRATE_CONFIG"
+API_PID=""
+WEB_PID=""
+cleanup() {
+	if [ -n "$WEB_PID" ]; then
+		kill "$WEB_PID" 2>/dev/null || true
+		wait "$WEB_PID" 2>/dev/null || true
+	fi
+	if [ -n "$API_PID" ]; then
+		kill "$API_PID" 2>/dev/null || true
+		wait "$API_PID" 2>/dev/null || true
+	fi
+	rm -f "$API_CONFIG" "$MIGRATE_CONFIG" "$STACK_TLS_DIR/cert.pem" "$STACK_TLS_DIR/key.pem"
+	rm -f "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
+	rmdir "$SECRETS_DIR" "$STORAGE_DIR" 2>/dev/null || true
+	rmdir "$STACK_TLS_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 mise exec -- go run ./cmd/api --config "$API_CONFIG" &
 API_PID=$!
+
+API_READY=false
+for _ in $(seq 1 100); do
+	if curl --fail --silent --show-error \
+		--cacert "$STACK_TLS_DIR/cert.pem" \
+		https://127.0.0.1:18080/_health/ready >/dev/null 2>&1; then
+		API_READY=true
+		break
+	fi
+	sleep 0.1
+done
+if [ "$API_READY" != true ]; then
+	echo "API did not become ready" >&2
+	exit 1
+fi
 
 export ACCOUNTABLE_RUNTIME_API_BASE_URL="https://127.0.0.1:18080"
 export ACCOUNTABLE_RUNTIME_ARCHITECTURE_PROBE="true"
@@ -124,24 +150,5 @@ export ACCOUNTABLE_WEB_HOST="127.0.0.1"
 export ACCOUNTABLE_WEB_PORT="4173"
 pnpm --filter @accountable/web exec vite preview --host 127.0.0.1 --port 4173 &
 WEB_PID=$!
-
-cleanup() {
-	kill "$WEB_PID" 2>/dev/null || true
-	kill "$API_PID" 2>/dev/null || true
-	wait "$WEB_PID" 2>/dev/null || true
-	wait "$API_PID" 2>/dev/null || true
-	rm -f "$API_CONFIG" "$MIGRATE_CONFIG" "$STACK_TLS_DIR/cert.pem" "$STACK_TLS_DIR/key.pem"
-	rm -f "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
-	rmdir "$SECRETS_DIR" "$STORAGE_DIR" 2>/dev/null || true
-	rmdir "$STACK_TLS_DIR" 2>/dev/null || true
-}
-trap cleanup EXIT
-
-for _ in $(seq 1 100); do
-	if (echo >/dev/tcp/127.0.0.1/18080) >/dev/null 2>&1; then
-		break
-	fi
-	sleep 0.1
-done
 
 wait "$WEB_PID"

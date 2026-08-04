@@ -108,11 +108,14 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 				t.Errorf("unsafe login payload: identity=%q headers=%v", payload.IdentityID, headers)
 			}
 			_, _ = response.Write([]byte(`{"accessToken":"short-lived"}`))
-		case "/api/v3/secrets/raw/database/password":
+		case "/api/v4/secrets/database/password":
 			if request.Header.Get("Authorization") != "Bearer short-lived" ||
-				request.URL.Query().Get("workspaceId") != "project" ||
+				request.URL.Query().Get("projectId") != "project" ||
 				request.URL.Query().Get("environment") != "production" ||
-				request.URL.Query().Get("secretPath") != "/accountable/api" {
+				request.URL.Query().Get("secretPath") != "/accountable/api" ||
+				request.URL.Query().Get("viewSecretValue") != "true" ||
+				request.URL.Query().Get("expandSecretReferences") != "false" ||
+				request.URL.Query().Get("includeImports") != "false" {
 				t.Errorf("unsafe secret request: %s", request.URL.String())
 			}
 			_, _ = response.Write([]byte(`{"secret":{"secretKey":"database/password","secretValue":"resolved"}}`))

@@ -3,6 +3,8 @@ package foundation
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -10,152 +12,383 @@ import (
 )
 
 const (
-	SecretProviderFile  = "file"
+	FeatureProviderNoop = "noop"
+
+	SecretProviderFile       = "file"
+	SecretProviderInfisical  = "infisical"
+	InfisicalAuthAWSIAM      = "aws_iam"
+	infisicalCloudEUEndpoint = "https://eu.infisical.com"
+
 	StorageProviderFile = "filesystem"
-	CryptoProviderLocal = "local"
+	StorageProviderS3   = "s3"
+
+	CryptoProviderLocal  = "local"
+	CryptoProviderAWSKMS = "aws_kms"
+
+	TimeProviderSystem = "system"
+	TimeProviderLinux  = "linux"
+
+	DatabaseTLSDisable    = "disable"
+	DatabaseTLSVerifyFull = "verify-full"
 )
 
-var secretRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+var (
+	secretRefPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	postgresIdentifier  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
+	awsRegionPattern    = regexp.MustCompile(`^[a-z]{2}(?:-gov)?-[a-z]+-\d$`)
+	awsAccountPattern   = regexp.MustCompile(`^[0-9]{12}$`)
+	s3BucketPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+	awsKMSKeyARNPattern = regexp.MustCompile(`^arn:aws(?:-us-gov)?:kms:([a-z0-9-]+):([0-9]{12}):key/[A-Za-z0-9-]+$`)
+)
 
 // SecretRef is an opaque lookup key. It never contains secret material.
 type SecretRef string
 
 type Config struct {
-	Secrets  SecretsConfig
-	Database DatabaseConfig
-	Storage  StorageConfig
-	Crypto   CryptoConfig
+	Environment  string
+	CheckTimeout time.Duration
+	Features     FeaturesConfig
+	Secrets      SecretsConfig
+	Database     DatabaseConfig
+	Storage      StorageConfig
+	Crypto       CryptoConfig
+	Time         TimeConfig
 }
 
+type FeaturesConfig struct{ Provider string }
+
 type SecretsConfig struct {
-	Provider  string
-	Directory string
+	Provider          string
+	Directory         string
+	SiteURL           string
+	AWSRegion         string
+	ProjectID         string
+	Environment       string
+	SecretPath        string
+	AuthMethod        string
+	MachineIdentityID string
 }
 
 type DatabaseConfig struct {
-	DSNRef              SecretRef
+	Host                string
+	Port                uint16
+	Name                string
+	User                string
+	Role                string
+	PasswordRef         SecretRef
+	TLSMode             string
+	TLSRootCAFile       string
 	ConnectTimeout      time.Duration
+	StatementTimeout    time.Duration
 	HealthCheckInterval time.Duration
 	MaxConnections      int32
 	Timezone            string
 }
 
 type StorageConfig struct {
-	Provider string
-	Root     string
+	Provider      string
+	Root          string
+	Region        string
+	Bucket        string
+	Prefix        string
+	ExpectedOwner string
+	KMSKeyARN     string
 }
 
 type CryptoConfig struct {
-	Provider string
-	KeyRef   SecretRef
+	Provider  string
+	KeyRef    SecretRef
+	Region    string
+	KMSKeyARN string
+}
+
+type TimeConfig struct {
+	Provider        string
+	MaxClockError   time.Duration
+	MaxDatabaseSkew time.Duration
 }
 
 // FileConfig is embedded in each binary's strict TOML document.
 type FileConfig struct {
-	Secrets  SecretsFileConfig  `toml:"secrets"`
-	Database DatabaseFileConfig `toml:"database"`
-	Storage  StorageFileConfig  `toml:"storage"`
-	Crypto   CryptoFileConfig   `toml:"crypto"`
+	CheckTimeout string             `toml:"foundation_check_timeout"`
+	Features     FeaturesFileConfig `toml:"features"`
+	Secrets      SecretsFileConfig  `toml:"secrets"`
+	Database     DatabaseFileConfig `toml:"database"`
+	Storage      StorageFileConfig  `toml:"storage"`
+	Crypto       CryptoFileConfig   `toml:"crypto"`
+	Time         TimeFileConfig     `toml:"time"`
+}
+
+type FeaturesFileConfig struct {
+	Provider string `toml:"provider"`
 }
 
 type SecretsFileConfig struct {
-	Provider  string `toml:"provider"`
-	Directory string `toml:"directory"`
+	Provider          string `toml:"provider"`
+	Directory         string `toml:"directory"`
+	SiteURL           string `toml:"site_url"`
+	AWSRegion         string `toml:"aws_region"`
+	ProjectID         string `toml:"project_id"`
+	Environment       string `toml:"environment"`
+	SecretPath        string `toml:"secret_path"`
+	AuthMethod        string `toml:"auth_method"`
+	MachineIdentityID string `toml:"machine_identity_id"`
 }
 
 type DatabaseFileConfig struct {
-	DSNRef              string `toml:"dsn_ref"`
+	Host                string `toml:"host"`
+	Port                uint16 `toml:"port"`
+	Name                string `toml:"name"`
+	User                string `toml:"user"`
+	Role                string `toml:"role"`
+	PasswordRef         string `toml:"password_ref"`
+	TLSMode             string `toml:"tls_mode"`
+	TLSRootCAFile       string `toml:"tls_root_ca_file"`
 	ConnectTimeout      string `toml:"connect_timeout"`
+	StatementTimeout    string `toml:"statement_timeout"`
 	HealthCheckInterval string `toml:"health_check_interval"`
 	MaxConnections      int32  `toml:"max_connections"`
 	Timezone            string `toml:"timezone"`
 }
 
 type StorageFileConfig struct {
-	Provider string `toml:"provider"`
-	Root     string `toml:"root"`
+	Provider      string `toml:"provider"`
+	Root          string `toml:"root"`
+	Region        string `toml:"region"`
+	Bucket        string `toml:"bucket"`
+	Prefix        string `toml:"prefix"`
+	ExpectedOwner string `toml:"expected_owner"`
+	KMSKeyARN     string `toml:"kms_key_arn"`
 }
 
 type CryptoFileConfig struct {
-	Provider string `toml:"provider"`
-	KeyRef   string `toml:"key_ref"`
+	Provider  string `toml:"provider"`
+	KeyRef    string `toml:"key_ref"`
+	Region    string `toml:"region"`
+	KMSKeyARN string `toml:"kms_key_arn"`
+}
+
+type TimeFileConfig struct {
+	Provider        string `toml:"provider"`
+	MaxClockError   string `toml:"max_clock_error"`
+	MaxDatabaseSkew string `toml:"max_database_skew"`
 }
 
 func Parse(environment, configPath string, raw FileConfig) (Config, error) {
-	if raw.Secrets.Provider == "" {
-		return Config{}, errors.New("secrets.provider is required")
+	if environment != "development" && environment != "staging" && environment != "production" {
+		return Config{}, errors.New("environment must be development, staging, or production")
 	}
-	if raw.Secrets.Provider != SecretProviderFile {
-		return Config{}, errors.New("secrets.provider is unsupported")
+	if raw.Features.Provider != FeatureProviderNoop {
+		return Config{}, errors.New("features.provider must be noop")
 	}
-	if raw.Secrets.Directory == "" {
-		return Config{}, errors.New("secrets.directory is required")
-	}
-	if raw.Database.DSNRef == "" {
-		return Config{}, errors.New("database.dsn_ref is required")
-	}
-	dsnRef, err := ParseSecretRef(raw.Database.DSNRef)
-	if err != nil {
-		return Config{}, fmt.Errorf("database.dsn_ref: %w", err)
-	}
-	connectTimeout, err := parsePositiveDuration("database.connect_timeout", raw.Database.ConnectTimeout)
+	checkTimeout, err := parsePositiveDuration("foundation_check_timeout", raw.CheckTimeout)
 	if err != nil {
 		return Config{}, err
 	}
-	healthInterval, err := parsePositiveDuration("database.health_check_interval", raw.Database.HealthCheckInterval)
+	managed := environment == "staging" || environment == "production"
+	secrets, err := parseSecrets(environment, managed, configPath, raw.Secrets)
 	if err != nil {
 		return Config{}, err
 	}
-	if raw.Database.MaxConnections < 1 || raw.Database.MaxConnections > 128 {
-		return Config{}, errors.New("database.max_connections must be between 1 and 128")
-	}
-	if raw.Database.Timezone != "UTC" {
-		return Config{}, errors.New("database.timezone must be UTC")
-	}
-	if raw.Storage.Provider != StorageProviderFile {
-		if raw.Storage.Provider == "" {
-			return Config{}, errors.New("storage.provider is required")
-		}
-		return Config{}, errors.New("storage.provider is unsupported")
-	}
-	if raw.Storage.Root == "" {
-		return Config{}, errors.New("storage.root is required")
-	}
-	if raw.Crypto.Provider != CryptoProviderLocal {
-		if raw.Crypto.Provider == "" {
-			return Config{}, errors.New("crypto.provider is required")
-		}
-		return Config{}, errors.New("crypto.provider is unsupported")
-	}
-	keyRef, err := ParseSecretRef(raw.Crypto.KeyRef)
+	database, err := parseDatabase(managed, configPath, raw.Database)
 	if err != nil {
-		return Config{}, fmt.Errorf("crypto.key_ref: %w", err)
+		return Config{}, err
 	}
-	if environment == "production" {
-		return Config{}, errors.New("production foundation providers are not configured")
+	storage, err := parseStorage(managed, configPath, raw.Storage)
+	if err != nil {
+		return Config{}, err
 	}
-	base := filepath.Dir(configPath)
+	crypto, err := parseCrypto(managed, raw.Crypto)
+	if err != nil {
+		return Config{}, err
+	}
+	timeConfig, err := parseTime(managed, raw.Time)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
-		Secrets: SecretsConfig{
-			Provider:  raw.Secrets.Provider,
-			Directory: absoluteFrom(base, raw.Secrets.Directory),
-		},
-		Database: DatabaseConfig{
-			DSNRef:              dsnRef,
-			ConnectTimeout:      connectTimeout,
-			HealthCheckInterval: healthInterval,
-			MaxConnections:      raw.Database.MaxConnections,
-			Timezone:            raw.Database.Timezone,
-		},
-		Storage: StorageConfig{
-			Provider: raw.Storage.Provider,
-			Root:     absoluteFrom(base, raw.Storage.Root),
-		},
-		Crypto: CryptoConfig{
-			Provider: raw.Crypto.Provider,
-			KeyRef:   keyRef,
-		},
+		Environment:  environment,
+		CheckTimeout: checkTimeout,
+		Features:     FeaturesConfig{Provider: raw.Features.Provider},
+		Secrets:      secrets,
+		Database:     database,
+		Storage:      storage,
+		Crypto:       crypto,
+		Time:         timeConfig,
 	}, nil
+}
+
+func parseSecrets(environment string, managed bool, configPath string, raw SecretsFileConfig) (SecretsConfig, error) {
+	if !managed {
+		if raw.Provider != SecretProviderFile || raw.Directory == "" {
+			return SecretsConfig{}, errors.New("development secrets.provider must be file with a directory")
+		}
+		return SecretsConfig{Provider: raw.Provider, Directory: absoluteFrom(filepath.Dir(configPath), raw.Directory)}, nil
+	}
+	if raw.Provider != SecretProviderInfisical {
+		return SecretsConfig{}, errors.New("staging and production secrets.provider must be infisical")
+	}
+	parsedURL, err := url.Parse(raw.SiteURL)
+	if err != nil || parsedURL.String() != infisicalCloudEUEndpoint {
+		return SecretsConfig{}, errors.New("staging and production secrets.site_url must select managed Infisical Cloud EU")
+	}
+	if !awsRegionPattern.MatchString(raw.AWSRegion) {
+		return SecretsConfig{}, errors.New("infisical aws_region is invalid")
+	}
+	if raw.ProjectID == "" || raw.Environment == "" || raw.MachineIdentityID == "" {
+		return SecretsConfig{}, errors.New("infisical project_id, environment, and machine_identity_id are required")
+	}
+	if raw.Environment != environment {
+		return SecretsConfig{}, errors.New("infisical environment must match the application environment")
+	}
+	if raw.AuthMethod != InfisicalAuthAWSIAM {
+		return SecretsConfig{}, errors.New("infisical auth_method must be aws_iam")
+	}
+	if raw.SecretPath == "" || !strings.HasPrefix(raw.SecretPath, "/") || path.Clean(raw.SecretPath) != raw.SecretPath {
+		return SecretsConfig{}, errors.New("infisical secret_path must be an absolute clean path")
+	}
+	return SecretsConfig{
+		Provider:          raw.Provider,
+		SiteURL:           raw.SiteURL,
+		AWSRegion:         raw.AWSRegion,
+		ProjectID:         raw.ProjectID,
+		Environment:       raw.Environment,
+		SecretPath:        raw.SecretPath,
+		AuthMethod:        raw.AuthMethod,
+		MachineIdentityID: raw.MachineIdentityID,
+	}, nil
+}
+
+func parseDatabase(managed bool, configPath string, raw DatabaseFileConfig) (DatabaseConfig, error) {
+	if raw.Host == "" || raw.Port == 0 || raw.Name == "" {
+		return DatabaseConfig{}, errors.New("database host, port, and name are required")
+	}
+	if !postgresIdentifier.MatchString(raw.User) || !postgresIdentifier.MatchString(raw.Role) {
+		return DatabaseConfig{}, errors.New("database user and role must be PostgreSQL identifiers")
+	}
+	passwordRef, err := ParseSecretRef(raw.PasswordRef)
+	if err != nil {
+		return DatabaseConfig{}, fmt.Errorf("database.password_ref: %w", err)
+	}
+	if managed && raw.TLSMode != DatabaseTLSVerifyFull {
+		return DatabaseConfig{}, errors.New("staging and production database.tls_mode must be verify-full")
+	}
+	if !managed && raw.TLSMode != DatabaseTLSDisable {
+		return DatabaseConfig{}, errors.New("development database.tls_mode must be disable")
+	}
+	rootCA := ""
+	if raw.TLSRootCAFile != "" {
+		rootCA = absoluteFrom(filepath.Dir(configPath), raw.TLSRootCAFile)
+	}
+	connectTimeout, err := parsePositiveDuration("database.connect_timeout", raw.ConnectTimeout)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+	statementTimeout, err := parsePositiveDuration("database.statement_timeout", raw.StatementTimeout)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+	healthInterval, err := parsePositiveDuration("database.health_check_interval", raw.HealthCheckInterval)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+	if raw.MaxConnections < 1 || raw.MaxConnections > 128 {
+		return DatabaseConfig{}, errors.New("database.max_connections must be between 1 and 128")
+	}
+	if raw.Timezone != "UTC" {
+		return DatabaseConfig{}, errors.New("database.timezone must be UTC")
+	}
+	return DatabaseConfig{
+		Host:                raw.Host,
+		Port:                raw.Port,
+		Name:                raw.Name,
+		User:                raw.User,
+		Role:                raw.Role,
+		PasswordRef:         passwordRef,
+		TLSMode:             raw.TLSMode,
+		TLSRootCAFile:       rootCA,
+		ConnectTimeout:      connectTimeout,
+		StatementTimeout:    statementTimeout,
+		HealthCheckInterval: healthInterval,
+		MaxConnections:      raw.MaxConnections,
+		Timezone:            raw.Timezone,
+	}, nil
+}
+
+func parseStorage(managed bool, configPath string, raw StorageFileConfig) (StorageConfig, error) {
+	if !managed {
+		if raw.Provider != StorageProviderFile || raw.Root == "" {
+			return StorageConfig{}, errors.New("development storage.provider must be filesystem with a root")
+		}
+		return StorageConfig{Provider: raw.Provider, Root: absoluteFrom(filepath.Dir(configPath), raw.Root)}, nil
+	}
+	if raw.Provider != StorageProviderS3 {
+		return StorageConfig{}, errors.New("staging and production storage.provider must be s3")
+	}
+	if !awsRegionPattern.MatchString(raw.Region) || !s3BucketPattern.MatchString(raw.Bucket) ||
+		!awsAccountPattern.MatchString(raw.ExpectedOwner) {
+		return StorageConfig{}, errors.New("S3 region, bucket, and expected_owner are invalid")
+	}
+	if raw.Prefix == "" || strings.HasPrefix(raw.Prefix, "/") || strings.Contains(raw.Prefix, "..") {
+		return StorageConfig{}, errors.New("S3 prefix must be a non-empty relative prefix")
+	}
+	if err := validateKMSKeyARN(raw.KMSKeyARN, raw.Region, raw.ExpectedOwner); err != nil {
+		return StorageConfig{}, fmt.Errorf("storage.kms_key_arn: %w", err)
+	}
+	return StorageConfig{
+		Provider: raw.Provider, Region: raw.Region, Bucket: raw.Bucket, Prefix: raw.Prefix,
+		ExpectedOwner: raw.ExpectedOwner, KMSKeyARN: raw.KMSKeyARN,
+	}, nil
+}
+
+func parseCrypto(managed bool, raw CryptoFileConfig) (CryptoConfig, error) {
+	if !managed {
+		if raw.Provider != CryptoProviderLocal {
+			return CryptoConfig{}, errors.New("development crypto.provider must be local")
+		}
+		keyRef, err := ParseSecretRef(raw.KeyRef)
+		if err != nil {
+			return CryptoConfig{}, fmt.Errorf("crypto.key_ref: %w", err)
+		}
+		return CryptoConfig{Provider: raw.Provider, KeyRef: keyRef}, nil
+	}
+	if raw.Provider != CryptoProviderAWSKMS {
+		return CryptoConfig{}, errors.New("staging and production crypto.provider must be aws_kms")
+	}
+	if !awsRegionPattern.MatchString(raw.Region) {
+		return CryptoConfig{}, errors.New("crypto.region is invalid")
+	}
+	if err := validateKMSKeyARN(raw.KMSKeyARN, raw.Region, ""); err != nil {
+		return CryptoConfig{}, fmt.Errorf("crypto.kms_key_arn: %w", err)
+	}
+	return CryptoConfig{Provider: raw.Provider, Region: raw.Region, KMSKeyARN: raw.KMSKeyARN}, nil
+}
+
+func parseTime(managed bool, raw TimeFileConfig) (TimeConfig, error) {
+	wantProvider := TimeProviderSystem
+	if managed {
+		wantProvider = TimeProviderLinux
+	}
+	if raw.Provider != wantProvider {
+		return TimeConfig{}, fmt.Errorf("time.provider must be %s for this environment", wantProvider)
+	}
+	maxClockError, err := parsePositiveDuration("time.max_clock_error", raw.MaxClockError)
+	if err != nil {
+		return TimeConfig{}, err
+	}
+	maxDatabaseSkew, err := parsePositiveDuration("time.max_database_skew", raw.MaxDatabaseSkew)
+	if err != nil {
+		return TimeConfig{}, err
+	}
+	return TimeConfig{Provider: raw.Provider, MaxClockError: maxClockError, MaxDatabaseSkew: maxDatabaseSkew}, nil
+}
+
+func validateKMSKeyARN(value, region, account string) error {
+	matches := awsKMSKeyARNPattern.FindStringSubmatch(value)
+	if len(matches) != 3 || matches[1] != region || account != "" && matches[2] != account {
+		return errors.New("must be a key ARN in the configured region and account")
+	}
+	return nil
 }
 
 func ParseSecretRef(value string) (SecretRef, error) {

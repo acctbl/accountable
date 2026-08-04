@@ -119,6 +119,10 @@ linters:
               desc: domain/application must not import vendor SDKs
             - pkg: github.com/aws/aws-sdk-go-v2
               desc: domain/application must not import vendor SDKs
+            - pkg: github.com/aws/aws-encryption-sdk
+              desc: domain/application must use the crypto boundary
+            - pkg: github.com/aws/aws-cryptographic-material-providers-library
+              desc: domain/application must use the crypto boundary
             - pkg: github.com/twmb/franz-go
               desc: domain/application must not import the broker client
             - pkg: go.opentelemetry.io/otel/exporters

@@ -31,6 +31,11 @@ tasks:
     cmds:
       - go run ./cmd/migrate --config "{{.ROOT_DIR}}/config/development/migrate.toml"
 
+  preflight:
+    desc: Run the API startup safety checks without opening a listener
+    cmds:
+      - go run ./cmd/preflight --config "{{.ROOT_DIR}}/config/development/api.toml"
+
   generate:
     desc: Regenerate versioned code
     cmds:

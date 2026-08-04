@@ -12,8 +12,8 @@ import (
 
 const maximumSecretBytes = 64 << 10
 
-type SecretResolver interface {
-	Resolve(context.Context, SecretRef) (SecretValue, error)
+type SecretSource interface {
+	ResolveBatch(context.Context, []SecretRef) (map[SecretRef]SecretValue, error)
 }
 
 type SecretValue struct{ bytes []byte }
@@ -27,9 +27,9 @@ func (v SecretValue) Bytes() []byte { return bytes.Clone(v.bytes) }
 func (SecretValue) String() string   { return "[REDACTED]" }
 func (SecretValue) GoString() string { return "[REDACTED]" }
 
-type FileSecretResolver struct{ root string }
+type FileSecretSource struct{ root string }
 
-func NewFileSecretResolver(root string) (*FileSecretResolver, error) {
+func NewFileSecretSource(root string) (*FileSecretSource, error) {
 	if !filepath.IsAbs(root) {
 		return nil, errors.New("secret directory must be absolute")
 	}
@@ -41,10 +41,25 @@ func NewFileSecretResolver(root string) (*FileSecretResolver, error) {
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("secret directory is unavailable")
 	}
-	return &FileSecretResolver{root: resolvedRoot}, nil
+	return &FileSecretSource{root: resolvedRoot}, nil
 }
 
-func (r *FileSecretResolver) Resolve(ctx context.Context, ref SecretRef) (SecretValue, error) {
+func (r *FileSecretSource) ResolveBatch(ctx context.Context, refs []SecretRef) (map[SecretRef]SecretValue, error) {
+	values := make(map[SecretRef]SecretValue, len(refs))
+	for _, ref := range refs {
+		if _, duplicate := values[ref]; duplicate {
+			return nil, errors.New("secret references must be unique")
+		}
+		value, err := r.resolve(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		values[ref] = value
+	}
+	return values, nil
+}
+
+func (r *FileSecretSource) resolve(ctx context.Context, ref SecretRef) (SecretValue, error) {
 	if err := ctx.Err(); err != nil {
 		return SecretValue{}, err
 	}

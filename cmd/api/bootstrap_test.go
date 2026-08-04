@@ -65,7 +65,7 @@ func TestRunningAPIDropsAndRecoversReadinessWithoutExiting(t *testing.T) {
 			Foundation: foundation.Config{Database: foundation.DatabaseConfig{
 				HealthCheckInterval: 5 * time.Millisecond,
 				ConnectTimeout:      50 * time.Millisecond,
-			}},
+			}, CheckTimeout: 50 * time.Millisecond},
 		}, dependencies)
 	}()
 	t.Cleanup(func() {

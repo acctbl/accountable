@@ -132,14 +132,15 @@ func (a *infisicalHTTPAPI) Login(ctx context.Context) (string, error) {
 }
 
 func (a *infisicalHTTPAPI) Read(ctx context.Context, token string, ref Ref) ([]byte, error) {
-	endpoint := a.config.SiteURL + "/api/v3/secrets/raw/" + url.PathEscape(string(ref))
+	endpoint := a.config.SiteURL + "/api/v4/secrets/" + url.PathEscape(string(ref))
 	query := url.Values{
-		"environment":      []string{a.config.Environment},
-		"secretPath":       []string{a.config.SecretPath},
-		"workspaceId":      []string{a.config.ProjectID},
-		"type":             []string{"shared"},
-		"expandReferences": []string{"false"},
-		"include_imports":  []string{"false"},
+		"environment":            []string{a.config.Environment},
+		"secretPath":             []string{a.config.SecretPath},
+		"projectId":              []string{a.config.ProjectID},
+		"type":                   []string{"shared"},
+		"viewSecretValue":        []string{"true"},
+		"expandSecretReferences": []string{"false"},
+		"includeImports":         []string{"false"},
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+query.Encode(), nil)
 	if err != nil {

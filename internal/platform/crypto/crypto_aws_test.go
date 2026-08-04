@@ -1,9 +1,13 @@
 package crypto
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"maps"
 	"testing"
+
+	esdktypes "github.com/aws/aws-encryption-sdk/releases/go/encryption-sdk/awscryptographyencryptionsdksmithygeneratedtypes"
 )
 
 type fakeEncryptionEngine struct {
@@ -48,6 +52,61 @@ func TestAWSCryptoPreflightRefusesProviderFailureAndMismatch(t *testing.T) {
 	} {
 		if err := newAWSCrypto(engine).Check(context.Background()); !errors.Is(err, ErrCryptoUnavailable) {
 			t.Fatalf("Check = %v, want crypto unavailable", err)
+		}
+	}
+}
+
+type fakeEncryptionSDK struct {
+	decryptContext func(requested map[string]string) map[string]string
+}
+
+func (f fakeEncryptionSDK) Encrypt(_ context.Context, input esdktypes.EncryptInput) (*esdktypes.EncryptOutput, error) {
+	return &esdktypes.EncryptOutput{
+		Ciphertext:        append([]byte("sealed:"), input.Plaintext...),
+		EncryptionContext: input.EncryptionContext,
+	}, nil
+}
+
+func (f fakeEncryptionSDK) Decrypt(_ context.Context, input esdktypes.DecryptInput) (*esdktypes.DecryptOutput, error) {
+	return &esdktypes.DecryptOutput{
+		Plaintext:         bytes.TrimPrefix(input.Ciphertext, []byte("sealed:")),
+		EncryptionContext: f.decryptContext(input.EncryptionContext),
+	}, nil
+}
+
+func TestAWSCryptoAcceptsSignedSuiteReservedContextPair(t *testing.T) {
+	t.Parallel()
+
+	engine := &awsEncryptionEngine{client: fakeEncryptionSDK{
+		decryptContext: func(requested map[string]string) map[string]string {
+			stored := maps.Clone(requested)
+			stored["aws-crypto-public-key"] = "AmFsZ29yaXRobS1zaWduaW5nLWtleQ=="
+			return stored
+		},
+	}}
+	if err := newAWSCrypto(engine).Check(context.Background()); err != nil {
+		t.Fatalf("Check = %v, want signed-suite ciphertext accepted", err)
+	}
+}
+
+func TestAWSCryptoRefusesMissingOrMismatchedContextPair(t *testing.T) {
+	t.Parallel()
+
+	for name, mutate := range map[string]func(map[string]string) map[string]string{
+		"missing pair": func(requested map[string]string) map[string]string {
+			stored := maps.Clone(requested)
+			delete(stored, "purpose")
+			return stored
+		},
+		"mismatched value": func(requested map[string]string) map[string]string {
+			stored := maps.Clone(requested)
+			stored["application"] = "other"
+			return stored
+		},
+	} {
+		engine := &awsEncryptionEngine{client: fakeEncryptionSDK{decryptContext: mutate}}
+		if err := newAWSCrypto(engine).Check(context.Background()); !errors.Is(err, ErrCryptoUnavailable) {
+			t.Fatalf("%s: Check = %v, want crypto unavailable", name, err)
 		}
 	}
 }

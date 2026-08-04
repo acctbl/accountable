@@ -183,6 +183,13 @@ SELECT
 	return ValidateSchemaState(version, dirty)
 }
 
+func (d *Database) Ping(ctx context.Context) error {
+	if err := d.pool.Ping(ctx); err != nil {
+		return ErrDatabaseUnavailable
+	}
+	return nil
+}
+
 func (d *Database) Close() { d.pool.Close() }
 
 func (d *Database) CheckClock(ctx context.Context, source clock.Clock, maximumSkew time.Duration) error {

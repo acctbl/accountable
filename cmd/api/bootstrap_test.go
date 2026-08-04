@@ -15,7 +15,7 @@ import (
 
 type stubDependencies struct{ unavailable atomic.Bool }
 
-func (d *stubDependencies) Check(context.Context) error {
+func (d *stubDependencies) Ping(context.Context) error {
 	if d.unavailable.Load() {
 		return database.ErrDatabaseUnavailable
 	}

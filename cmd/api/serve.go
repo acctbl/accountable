@@ -206,7 +206,7 @@ func bootstrapAndServe(
 }
 
 type dependencySet interface {
-	Check(context.Context) error
+	Ping(context.Context) error
 }
 
 func serveWithDependencies(ctx context.Context, config config, dependencies dependencySet) error {
@@ -271,8 +271,8 @@ func monitorDependencies(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			checkCtx, cancel := context.WithTimeout(ctx, config.CheckTimeout)
-			err := dependencies.Check(checkCtx)
+			pingCtx, cancel := context.WithTimeout(ctx, config.CheckTimeout)
+			err := dependencies.Ping(pingCtx)
 			cancel()
 			if ctx.Err() != nil {
 				return

@@ -137,7 +137,9 @@ tasks:
   test:postgres:
     desc: Prove bootstrap and migration refusals against real Postgres
     cmds:
-      - bash scripts/with-test-postgres.sh go test -race ./internal/migration -run PostgresIntegration -count=1
+      - >-
+        bash scripts/with-test-postgres.sh go test -race
+        ./internal/migration ./tests/foundation -run PostgresIntegration -count=1
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only

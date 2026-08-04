@@ -296,14 +296,25 @@ tasks:
             /workspaces/accountable/packages/proto/node_modules \
             /workspaces/accountable/packages/ui/node_modules
       - |
-        docker run --rm \
-          --volume "{{.TASKFILE_DIR}}:/workspaces/accountable" \
-          --volume accountable-devcontainer-home:/home/devcontainer \
-          --volume accountable-devcontainer-node-modules:/workspaces/accountable/node_modules \
-          --volume accountable-devcontainer-admin-node-modules:/workspaces/accountable/apps/admin/node_modules \
-          --volume accountable-devcontainer-web-node-modules:/workspaces/accountable/apps/web/node_modules \
-          --volume accountable-devcontainer-proto-node-modules:/workspaces/accountable/packages/proto/node_modules \
-          --volume accountable-devcontainer-ui-node-modules:/workspaces/accountable/packages/ui/node_modules \
-          --workdir /workspaces/accountable \
-          --env CI=1 \
-          accountable-devcontainer:local bash .devcontainer/parity.sh
+        parity_network="accountable-devcontainer-local-$$"
+        docker network create "$parity_network"
+        cleanup() { docker network rm "$parity_network" >/dev/null 2>&1 || true; }
+        trap cleanup EXIT
+        LOCALSTACK_TEST_NETWORK="$parity_network" bash scripts/with-localstack.sh \
+          docker run --rm \
+            --network "$parity_network" \
+            --volume "{{.TASKFILE_DIR}}:/workspaces/accountable" \
+            --volume accountable-devcontainer-home:/home/devcontainer \
+            --volume accountable-devcontainer-node-modules:/workspaces/accountable/node_modules \
+            --volume accountable-devcontainer-admin-node-modules:/workspaces/accountable/apps/admin/node_modules \
+            --volume accountable-devcontainer-web-node-modules:/workspaces/accountable/apps/web/node_modules \
+            --volume accountable-devcontainer-proto-node-modules:/workspaces/accountable/packages/proto/node_modules \
+            --volume accountable-devcontainer-ui-node-modules:/workspaces/accountable/packages/ui/node_modules \
+            --workdir /workspaces/accountable \
+            --env CI=1 \
+            --env ACCOUNTABLE_TEST_AWS_ENDPOINT \
+            --env ACCOUNTABLE_REQUIRE_LOCALSTACK \
+            --env AWS_ACCESS_KEY_ID \
+            --env AWS_SECRET_ACCESS_KEY \
+            --env AWS_REGION \
+            accountable-devcontainer:local bash .devcontainer/parity.sh

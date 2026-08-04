@@ -1,4 +1,4 @@
-package server
+package probe
 
 import (
 	"context"

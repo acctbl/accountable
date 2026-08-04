@@ -1,6 +1,9 @@
 package clock
 
-import "time"
+import (
+	"time"
+	_ "time/tzdata"
+)
 
 type Clock interface {
 	Now() time.Time

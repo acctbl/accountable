@@ -52,7 +52,7 @@ updates:
       default-days: 7
 
   - package-ecosystem: terraform
-    directory: /infra
+    directory: /infra/opentofu
     target-branch: develop
     schedule:
       day: monday

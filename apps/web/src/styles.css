@@ -1,1 +1,12 @@
 @import "@accountable/ui/globals.css";
+
+html {
+	scroll-behavior: smooth;
+	overscroll-behavior-x: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+}

@@ -69,9 +69,9 @@ prove trivy-vuln task security:trivy
 rm -f requirements.txt
 
 echo "==> negative: trivy IaC misconfiguration"
-cp testdata/negative/security/bad-infra.tf infra/negative_open.tf
+cp testdata/negative/security/bad-infra.tf infra/opentofu/negative_open.tf
 prove trivy-iac task security:trivy
-rm -f infra/negative_open.tf
+rm -f infra/opentofu/negative_open.tf
 
 echo "==> negative: floating lockfile tag"
 cp testdata/negative/security/Dockerfile.latest Dockerfile

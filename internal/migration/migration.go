@@ -6,13 +6,24 @@ import (
 	"errors"
 	"io/fs"
 
-	"github.com/acctbl/accountable/internal/foundation"
+	platformdb "github.com/acctbl/accountable/internal/platform/database"
 	"github.com/pressly/goose/v3"
 )
 
 const migrationLockID int64 = 7_599_793_098_397_629_243
 
-func Run(ctx context.Context, database *sql.DB, migrations fs.FS) error {
+func Run(ctx context.Context, database *sql.DB, sources ...Source) error {
+	if len(sources) == 0 {
+		sources = Catalogue()
+	}
+	migrations, err := mergeSources(sources)
+	if err != nil {
+		return err
+	}
+	return runFS(ctx, database, migrations)
+}
+
+func runFS(ctx context.Context, database *sql.DB, migrations fs.FS) error {
 	database.SetMaxOpenConns(1)
 	database.SetMaxIdleConns(1)
 
@@ -59,7 +70,7 @@ func Run(ctx context.Context, database *sql.DB, migrations fs.FS) error {
 	if err != nil {
 		return errors.New("migrated schema version cannot be read")
 	}
-	if err := foundation.ValidateSchemaState(version, false); err != nil {
+	if err := platformdb.ValidateSchemaState(version, false); err != nil {
 		return errors.New("migrations do not produce a binary-supported schema version")
 	}
 	result, err := database.ExecContext(ctx, `UPDATE public.accountable_schema_state SET version = $1, dirty = FALSE WHERE singleton = TRUE`, version)
@@ -92,16 +103,16 @@ func markStateDirtyIfPresent(ctx context.Context, database *sql.DB) error {
 	return nil
 }
 
-func validateCurrentState(ctx context.Context, database *sql.DB, migrationVersion int64) error {
+func validateCurrentState(ctx context.Context, sqlDB *sql.DB, migrationVersion int64) error {
 	var version int64
 	var dirty bool
-	if err := database.QueryRowContext(ctx, `SELECT version, dirty FROM public.accountable_schema_state WHERE singleton = TRUE`).Scan(&version, &dirty); err != nil {
+	if err := sqlDB.QueryRowContext(ctx, `SELECT version, dirty FROM public.accountable_schema_state WHERE singleton = TRUE`).Scan(&version, &dirty); err != nil {
 		return errors.New("schema state does not match the migration catalogue")
 	}
 	if version != migrationVersion {
 		return errors.New("schema state does not match the migration catalogue")
 	}
-	if err := foundation.ValidateSchemaState(version, dirty); err != nil {
+	if err := platformdb.ValidateSchemaState(version, dirty); err != nil {
 		return errors.New("schema state is not supported by this binary")
 	}
 	return nil

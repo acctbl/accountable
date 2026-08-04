@@ -147,11 +147,11 @@ tasks:
   migrations:check:
     desc: Validate goose migrations
     cmds:
-      - goose -dir db/migrations validate
+      - goose -dir internal/platform/database/migrations validate
 
   tofu:
     desc: Format-check and validate OpenTofu
-    dir: infra
+    dir: infra/opentofu
     cmds:
       - tofu fmt -check -recursive
       - tofu init -backend=false -input=false

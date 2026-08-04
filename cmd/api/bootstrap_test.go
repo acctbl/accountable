@@ -9,14 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/acctbl/accountable/internal/foundation"
+	"github.com/acctbl/accountable/internal/bootstrap"
+	"github.com/acctbl/accountable/internal/platform/database"
 )
 
 type stubDependencies struct{ unavailable atomic.Bool }
 
 func (d *stubDependencies) Check(context.Context) error {
 	if d.unavailable.Load() {
-		return foundation.ErrDatabaseUnavailable
+		return database.ErrDatabaseUnavailable
 	}
 	return nil
 }
@@ -30,7 +31,7 @@ func TestBootstrapFailureNeverStartsServing(t *testing.T) {
 	err := bootstrapAndServe(
 		context.Background(),
 		config{},
-		func(context.Context, foundation.Config) (ownedDependencySet, error) { return nil, want },
+		func(context.Context, bootstrap.Config) (ownedDependencySet, error) { return nil, want },
 		func(context.Context, config, dependencySet) error {
 			serveCalled = true
 			return nil
@@ -62,7 +63,7 @@ func TestRunningAPIDropsAndRecoversReadinessWithoutExiting(t *testing.T) {
 			Addr:              address,
 			UnaryRPCDeadline:  time.Second,
 			StreamRPCDeadline: time.Second,
-			Foundation: foundation.Config{Database: foundation.DatabaseConfig{
+			Foundation: bootstrap.Config{Database: database.Config{
 				HealthCheckInterval: 5 * time.Millisecond,
 				ConnectTimeout:      50 * time.Millisecond,
 			}, CheckTimeout: 50 * time.Millisecond},

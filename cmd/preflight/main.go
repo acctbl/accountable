@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/acctbl/accountable/internal/appconfig"
-	"github.com/acctbl/accountable/internal/foundation"
+	"github.com/acctbl/accountable/internal/bootstrap"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	report, err := foundation.Preflight(ctx, config.Foundation)
+	report, err := bootstrap.Preflight(ctx, config.Foundation)
 	if err != nil {
 		return err
 	}

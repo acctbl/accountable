@@ -20,7 +20,6 @@ pnpm --filter @accountable/web build
 
 API_CONFIG="$STACK_TLS_DIR/api.toml"
 MIGRATE_CONFIG="$STACK_TLS_DIR/migrate.toml"
-WEB_CONFIG="$STACK_TLS_DIR/web.toml"
 SECRETS_DIR="$STACK_TLS_DIR/secrets"
 STORAGE_DIR="$STACK_TLS_DIR/storage"
 mkdir -p "$SECRETS_DIR" "$STORAGE_DIR"
@@ -111,21 +110,19 @@ provider = "system"
 max_clock_error = "1s"
 max_database_skew = "5s"
 EOF
-cat >"$WEB_CONFIG" <<EOF
-environment = "development"
-listen_address = "127.0.0.1:4173"
-dist_dir = "$ROOT/apps/web/dist"
-api_base_url = "https://127.0.0.1:18080"
-architecture_probe = true
-configuration_revision = "playwright"
-tls_certificate_file = "$STACK_TLS_DIR/cert.pem"
-tls_private_key_file = "$STACK_TLS_DIR/key.pem"
-EOF
 
 mise exec -- go run ./cmd/migrate --config "$MIGRATE_CONFIG"
 mise exec -- go run ./cmd/api --config "$API_CONFIG" &
 API_PID=$!
-mise exec -- go run ./cmd/web --config "$WEB_CONFIG" &
+
+export ACCOUNTABLE_RUNTIME_API_BASE_URL="https://127.0.0.1:18080"
+export ACCOUNTABLE_RUNTIME_ARCHITECTURE_PROBE="true"
+export ACCOUNTABLE_RUNTIME_CONFIGURATION_REVISION="playwright"
+export ACCOUNTABLE_TLS_CERT_FILE="$STACK_TLS_DIR/cert.pem"
+export ACCOUNTABLE_TLS_KEY_FILE="$STACK_TLS_DIR/key.pem"
+export ACCOUNTABLE_WEB_HOST="127.0.0.1"
+export ACCOUNTABLE_WEB_PORT="4173"
+pnpm --filter @accountable/web exec vite preview --host 127.0.0.1 --port 4173 &
 WEB_PID=$!
 
 cleanup() {
@@ -133,7 +130,7 @@ cleanup() {
 	kill "$API_PID" 2>/dev/null || true
 	wait "$WEB_PID" 2>/dev/null || true
 	wait "$API_PID" 2>/dev/null || true
-	rm -f "$API_CONFIG" "$MIGRATE_CONFIG" "$WEB_CONFIG" "$STACK_TLS_DIR/cert.pem" "$STACK_TLS_DIR/key.pem"
+	rm -f "$API_CONFIG" "$MIGRATE_CONFIG" "$STACK_TLS_DIR/cert.pem" "$STACK_TLS_DIR/key.pem"
 	rm -f "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
 	rmdir "$SECRETS_DIR" "$STORAGE_DIR" 2>/dev/null || true
 	rmdir "$STACK_TLS_DIR" 2>/dev/null || true

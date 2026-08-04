@@ -94,8 +94,6 @@ linters:
               desc: API startup must never run migrations
             - pkg: github.com/acctbl/accountable/internal/migration
               desc: migrations run only through cmd/migrate
-            - pkg: github.com/acctbl/accountable/db
-              desc: migrations run only through cmd/migrate
         no-transport-in-domain:
           files:
             # gobwas/glob: **/domain/**/*.go does not match files directly in domain/.

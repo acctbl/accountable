@@ -8,14 +8,16 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/acctbl/accountable/db"
+	"github.com/acctbl/accountable/internal/bootstrap"
 	"github.com/acctbl/accountable/internal/configfile"
-	"github.com/acctbl/accountable/internal/foundation"
 	"github.com/acctbl/accountable/internal/migration"
+	"github.com/acctbl/accountable/internal/platform/clock"
+	"github.com/acctbl/accountable/internal/platform/database"
+	"github.com/acctbl/accountable/internal/platform/secret"
 )
 
 type fileConfig struct {
-	foundation.FileConfig
+	bootstrap.FileConfig
 	Environment string `toml:"environment"`
 }
 
@@ -40,14 +42,18 @@ func run(ctx context.Context, args []string) error {
 	if raw.Environment != "development" && raw.Environment != "staging" && raw.Environment != "production" {
 		return errors.New("environment must be development, staging, or production")
 	}
-	config, err := foundation.Parse(raw.Environment, path, raw.FileConfig)
+	config, err := bootstrap.Parse(raw.Environment, path, raw.FileConfig)
 	if err != nil {
 		return err
 	}
-	database, err := foundation.OpenMigrationDatabase(ctx, config)
+	source, err := secret.NewSource(ctx, config.Secrets, clock.System{})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = database.Close() }()
-	return migration.Run(ctx, database, db.Migrations())
+	sqlDB, err := database.OpenMigrationDatabase(ctx, config.Database, source)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = sqlDB.Close() }()
+	return migration.Run(ctx, sqlDB)
 }

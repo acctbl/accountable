@@ -59,17 +59,17 @@ function App({
 			messages={messages}
 		>
 			<DirectionProvider direction={getDirection(locale)}>
-				<ThemeProvider defaultTheme="system" storageKey="acctbl-theme">
-					<RegionalSettingsProvider value={regionalSettings}>
-						<AppErrorBoundary>
+				<AppErrorBoundary>
+					<ThemeProvider defaultTheme="system" storageKey="acctbl-theme">
+						<RegionalSettingsProvider value={regionalSettings}>
 							<ApiProvider clients={clients}>
 								<QueryClientProvider client={queryClient}>
 									<RouterProvider router={router} />
 								</QueryClientProvider>
 							</ApiProvider>
-						</AppErrorBoundary>
-					</RegionalSettingsProvider>
-				</ThemeProvider>
+						</RegionalSettingsProvider>
+					</ThemeProvider>
+				</AppErrorBoundary>
 			</DirectionProvider>
 		</IntlProvider>
 	);

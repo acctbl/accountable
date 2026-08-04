@@ -8,7 +8,8 @@ accountable/
 ├── cmd/
 │   ├── api/                 API server
 │   ├── migrate/             discovers and applies owner migrations
-│   └── preflight/           startup checks, no listen
+│   ├── preflight/           startup checks, no listen
+│   └── webconfig/           renders the validated web runtime config deploy artifact
 ├── internal/
 │   ├── bootstrap/           fail-closed dependency composition
 │   ├── modules/
@@ -34,7 +35,7 @@ accountable/
 │   └── ui/                  shared React UI
 ├── config/                  environment TOML
 ├── infra/
-│   └── opentofu/
+│   └── opentofu/            private S3 + CloudFront web edge
 ├── scripts/                 local helpers
 ├── tests/                   Playwright
 ├── testdata/                negative fixtures
@@ -42,6 +43,7 @@ accountable/
 ```
 
 ```text
+browser → CloudFront edge → private S3 (apps/web release + cmd/webconfig artifact)
 browser → apps/web → cmd/api → internal/modules/*
                               → internal/bootstrap → internal/platform/*
 ```

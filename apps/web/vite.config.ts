@@ -23,6 +23,12 @@ function localeBootstrap(includePseudoLocales: boolean): Plugin {
 	};
 }
 
+const edgeCacheControl = {
+	runtimeConfig: "no-store",
+	hashedAsset: "public, max-age=31536000, immutable",
+	document: "no-cache",
+};
+
 function runtimeConfigBody(): string {
 	const apiBaseURL =
 		process.env.ACCOUNTABLE_RUNTIME_API_BASE_URL ?? "http://localhost:8080";
@@ -39,23 +45,37 @@ function runtimeConfigBody(): string {
 	});
 }
 
-function runtimeConfig(): Plugin {
+// Local and CI simulation of the production edge in infra/opentofu: CloudFront
+// serves the built release from private S3 and owns these cache headers, and
+// the runtime config is a deploy artifact written by cmd/webconfig. Nothing in
+// this plugin runs in production.
+function edgeContractSimulator(): Plugin {
 	const serveConfig = (
 		_request: unknown,
 		response: import("node:http").ServerResponse,
 	) => {
 		response.statusCode = 200;
-		response.setHeader("Cache-Control", "no-store");
+		response.setHeader("Cache-Control", edgeCacheControl.runtimeConfig);
 		response.setHeader("Content-Type", "application/json; charset=utf-8");
 		response.end(runtimeConfigBody());
 	};
 	return {
-		name: "accountable:runtime-config",
+		name: "accountable:edge-contract-simulator",
 		configureServer(server) {
 			server.middlewares.use("/_runtime/config.json", serveConfig);
 		},
 		configurePreviewServer(server) {
 			server.middlewares.use("/_runtime/config.json", serveConfig);
+			server.middlewares.use((request, response, next) => {
+				const path = (request.url ?? "").split("?")[0] ?? "";
+				response.setHeader(
+					"Cache-Control",
+					path.startsWith("/assets/")
+						? edgeCacheControl.hashedAsset
+						: edgeCacheControl.document,
+				);
+				next();
+			});
 		},
 	};
 }
@@ -92,7 +112,7 @@ const config = defineConfig(({ command }) => {
 			https,
 		},
 		plugins: [
-			runtimeConfig(),
+			edgeContractSimulator(),
 			localeBootstrap(includePseudoLocales),
 			tailwindcss(),
 			tanstackRouter({ target: "react", autoCodeSplitting: true }),

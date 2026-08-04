@@ -52,7 +52,14 @@ elif command -v pg_config >/dev/null 2>&1; then
 	POSTGRES_DATA="$(mktemp -d "${TMPDIR:-/tmp}/accountable-postgres.XXXXXX")"
 	POSTGRES_PORT="$((55432 + ($$ % 1000)))"
 	"$POSTGRES_BINDIR/initdb" -D "$POSTGRES_DATA" -A trust -U postgres >/dev/null
-	"$POSTGRES_BINDIR/pg_ctl" -D "$POSTGRES_DATA" -o "-h 127.0.0.1 -p $POSTGRES_PORT" -w start >/dev/null
+	if ! "$POSTGRES_BINDIR/pg_ctl" -D "$POSTGRES_DATA" \
+		-o "-h 127.0.0.1 -p $POSTGRES_PORT -k $POSTGRES_DATA" -w start; then
+		echo "local Postgres failed to start" >&2
+		if [ -d "$POSTGRES_DATA/log" ]; then
+			cat "$POSTGRES_DATA"/log/* >&2 || true
+		fi
+		exit 1
+	fi
 	"$POSTGRES_BINDIR/createdb" -h 127.0.0.1 -p "$POSTGRES_PORT" -U postgres "$TEST_POSTGRES_DATABASE"
 	export ACCOUNTABLE_TEST_POSTGRES_DSN="postgres://postgres@127.0.0.1:${POSTGRES_PORT}/${TEST_POSTGRES_DATABASE}?sslmode=disable"
 else

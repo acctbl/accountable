@@ -27,7 +27,9 @@ type S3Storage struct {
 }
 
 func NewS3Storage(config Config, awsConfig aws.Config) *S3Storage {
-	return newS3Storage(config, s3.NewFromConfig(awsConfig))
+	return newS3Storage(config, s3.NewFromConfig(awsConfig, func(options *s3.Options) {
+		options.UsePathStyle = awsConfig.BaseEndpoint != nil
+	}))
 }
 
 func newS3Storage(config Config, client s3API) *S3Storage {
@@ -35,11 +37,7 @@ func newS3Storage(config Config, client s3API) *S3Storage {
 }
 
 func (s *S3Storage) Check(ctx context.Context) error {
-	publicAccess, err := s.client.GetPublicAccessBlock(ctx, &s3.GetPublicAccessBlockInput{
-		Bucket:              aws.String(s.config.Bucket),
-		ExpectedBucketOwner: aws.String(s.config.ExpectedOwner),
-	})
-	if err != nil || !blocksAllPublicAccess(publicAccess) {
+	if err := s.Probe(ctx); err != nil {
 		return ErrStorageUnavailable
 	}
 	encryption, err := s.client.GetBucketEncryption(ctx, &s3.GetBucketEncryptionInput{
@@ -51,7 +49,8 @@ func (s *S3Storage) Check(ctx context.Context) error {
 	}
 
 	want := []byte("accountable-storage-preflight")
-	key := strings.TrimSuffix(s.config.Prefix, "/") + "/.accountable-preflight/" + uuid.NewString()
+	key := strings.TrimSuffix(s.config.Prefix, "/") + "/.accountable-preflight/" +
+		s.config.AccessPurpose + "/" + uuid.NewString()
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:               aws.String(s.config.Bucket),
 		Key:                  aws.String(key),
@@ -85,6 +84,17 @@ func (s *S3Storage) Check(ctx context.Context) error {
 	closeErr := object.Body.Close()
 	deleteErr := clean()
 	if readErr != nil || closeErr != nil || deleteErr != nil || !bytes.Equal(got, want) {
+		return ErrStorageUnavailable
+	}
+	return nil
+}
+
+func (s *S3Storage) Probe(ctx context.Context) error {
+	publicAccess, err := s.client.GetPublicAccessBlock(ctx, &s3.GetPublicAccessBlockInput{
+		Bucket:              aws.String(s.config.Bucket),
+		ExpectedBucketOwner: aws.String(s.config.ExpectedOwner),
+	})
+	if err != nil || !blocksAllPublicAccess(publicAccess) {
 		return ErrStorageUnavailable
 	}
 	return nil

@@ -29,12 +29,12 @@ tasks:
   db:migrate:
     desc: Apply compiled migrations through the explicit migrator binary
     cmds:
-      - go run ./cmd/migrate --config "{{.ROOT_DIR}}/config/development/migrate.toml"
+      - go run ./cmd/migrate --config "{{.ROOT_DIR}}/config/local/migrate.toml"
 
   preflight:
     desc: Run the API startup safety checks without opening a listener
     cmds:
-      - go run ./cmd/preflight --config "{{.ROOT_DIR}}/config/development/api.toml"
+      - go run ./cmd/preflight --config "{{.ROOT_DIR}}/config/local/api.toml"
 
   generate:
     desc: Regenerate versioned code
@@ -137,7 +137,17 @@ tasks:
   test:postgres:
     desc: Prove bootstrap and migration refusals against real Postgres
     cmds:
-      - bash scripts/with-test-postgres.sh go test -race ./internal/migration -run PostgresIntegration -count=1
+      - >-
+        bash scripts/with-test-postgres.sh go test -race
+        ./internal/migration ./tests/foundation -run PostgresIntegration -count=1
+
+  test:managed-contract:
+    desc: Prove the S3, KMS, and Infisical adapters against managed development services
+    cmds:
+      - >-
+        ACCOUNTABLE_REQUIRE_MANAGED_CONTRACT=1 go test -race -v
+        ./internal/platform/storage ./internal/platform/crypto ./internal/platform/secret
+        -run AWSContract -count=1 -timeout=90s
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only
@@ -147,6 +157,7 @@ tasks:
   migrations:check:
     desc: Validate goose migrations
     cmds:
+      - go test ./internal/migration -run TestCommittedCatalogueMatchesFilenameContract -count=1
       - goose -dir internal/platform/database/migrations validate
 
   tofu:
@@ -154,8 +165,20 @@ tasks:
     dir: infra/opentofu
     cmds:
       - tofu fmt -check -recursive
-      - tofu init -backend=false -input=false
-      - tofu validate
+      - |
+        tofu init -backend=false -input=false
+        tofu validate
+        plugin_dir="$(pwd)/.terraform/providers"
+        validation_data="$(mktemp -d "${TMPDIR:-/tmp}/accountable-tofu-validate.XXXXXX")"
+        cleanup() { rm -rf "$validation_data"; }
+        trap cleanup EXIT
+        for root in bootstrap/development development; do
+          (
+            cd "$root"
+            TF_DATA_DIR="$validation_data/$root" tofu init -backend=false -input=false -plugin-dir="$plugin_dir"
+            TF_DATA_DIR="$validation_data/$root" tofu validate
+          )
+        done
 
   i18n:
     desc: Check localisation catalogs are extracted, valid, and complete

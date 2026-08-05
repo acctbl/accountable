@@ -19,79 +19,12 @@ func writeAPIConfig(t *testing.T, contents string) string {
 }
 
 func completeAPIConfig(environment string, architectureProbe bool) string {
-	if environment == "staging" || environment == "production" {
-		return fmt.Sprintf(`environment = %q
-listen_address = "0.0.0.0:8080"
-architecture_probe = %t
-allowed_origins = ["https://shell.example"]
-trusted_proxy_cidrs = ["10.0.0.0/8"]
-unary_rpc_timeout = "10s"
-stream_rpc_timeout = "25s"
-foundation_check_timeout = "30s"
-
-[features]
-provider = "noop"
-
-[secrets]
-provider = "infisical"
-site_url = "https://eu.infisical.com"
-aws_region = "eu-west-2"
-project_id = "accountable"
-environment = %q
-secret_path = "/accountable/api"
-auth_method = "aws_iam"
-machine_identity_id = "identity-api"
-
-[database]
-host = "postgres.internal"
-port = 5432
-name = "accountable"
-user = "accountable_login"
-role = "accountable_api"
-password_ref = "database/password"
-tls_mode = "verify-full"
-connect_timeout = "5s"
-statement_timeout = "10s"
-health_check_interval = "2s"
-max_connections = 16
-timezone = "UTC"
-
-[storage]
-provider = "s3"
-region = "eu-west-2"
-bucket = "accountable-private"
-prefix = "application/"
-expected_owner = "123456789012"
-kms_key_arn = "arn:aws:kms:eu-west-2:123456789012:key/11111111-1111-1111-1111-111111111111"
-
-[crypto]
-provider = "aws_kms"
-region = "eu-west-2"
-kms_key_arn = "arn:aws:kms:eu-west-2:123456789012:key/22222222-2222-2222-2222-222222222222"
-
-[time]
-provider = "linux"
-max_clock_error = "1s"
-max_database_skew = "1s"
-`, environment, architectureProbe, environment)
-	}
-	return fmt.Sprintf(`environment = %q
-listen_address = "127.0.0.1:8080"
-architecture_probe = %t
-allowed_origins = ["https://shell.example"]
-trusted_proxy_cidrs = []
-unary_rpc_timeout = "10s"
-stream_rpc_timeout = "25s"
-foundation_check_timeout = "30s"
-
-[features]
-provider = "noop"
-
-[secrets]
+	managed := environment == "staging" || environment == "production"
+	deploymentMode := "local"
+	secrets := `[secrets]
 provider = "file"
-directory = "secrets"
-
-[database]
+directory = "secrets"`
+	postgres := `[postgres]
 host = "127.0.0.1"
 port = 5432
 name = "accountable"
@@ -103,49 +36,119 @@ connect_timeout = "5s"
 statement_timeout = "10s"
 health_check_interval = "2s"
 max_connections = 16
-timezone = "UTC"
-
-[storage]
+timezone = "UTC"`
+	objectStorage := `[object_storage]
 provider = "filesystem"
 root = "storage"
-
-[crypto]
+access_purpose = "foundation-proof"`
+	kms := `[kms]
 provider = "local"
 key_ref = "crypto.primary_key"
-
-[time]
+encryption_context_prefix = "accountable.foundation"`
+	timeConfig := `[time]
 provider = "system"
 max_clock_error = "1s"
-max_database_skew = "1s"
-`, environment, architectureProbe)
-}
+max_database_skew = "1s"`
+	if managed {
+		deploymentMode = "managed"
+		secrets = fmt.Sprintf(`[secrets]
+provider = "infisical"
+site_url = "https://eu.infisical.com"
+aws_region = "eu-west-2"
+project_id = "accountable"
+environment = %q
+secret_path = "/accountable/api"
+auth_method = "aws_iam"
+machine_identity_id = "identity-api"`, environment)
+		postgres = `[postgres]
+host = "postgres.internal"
+port = 5432
+name = "accountable"
+user = "accountable_login"
+role = "accountable_api"
+password_ref = "database/password"
+tls_mode = "verify-full"
+connect_timeout = "5s"
+statement_timeout = "10s"
+health_check_interval = "2s"
+max_connections = 16
+timezone = "UTC"`
+		objectStorage = `[object_storage]
+provider = "s3"
+region = "eu-west-2"
+bucket = "accountable-private"
+prefix = "application/"
+expected_owner = "123456789012"
+kms_key_arn = "arn:aws:kms:eu-west-2:123456789012:key/11111111-1111-1111-1111-111111111111"
+access_purpose = "foundation-proof"`
+		kms = `[kms]
+provider = "aws_kms"
+region = "eu-west-2"
+kms_key_arn = "arn:aws:kms:eu-west-2:123456789012:key/22222222-2222-2222-2222-222222222222"
+encryption_context_prefix = "accountable.foundation"`
+		timeConfig = `[time]
+provider = "linux"
+max_clock_error = "1s"
+max_database_skew = "1s"`
+	}
+	return fmt.Sprintf(`schema_version = 1
+revision = "reviewed-1"
+environment = %q
+deployment_mode = %q
+cell_id = "cell-a"
+aws_region = "eu-west-2"
+runtime_role = "api"
+foundation_check_timeout = "30s"
+readiness_probe_interval = "10s"
 
-func TestConfigRequiresFoundationDependencies(t *testing.T) {
-	t.Parallel()
+[capabilities]
+architecture_probe = %t
+postgres = true
+secrets = true
+kms = true
+object_storage = true
+telemetry = false
+redpanda = false
 
-	path := writeAPIConfig(t, `environment = "development"
-listen_address = "127.0.0.1:8080"
-architecture_probe = false
-allowed_origins = ["http://localhost:3000"]
-trusted_proxy_cidrs = []
+[server]
+listen_address = "0.0.0.0:8080"
+allowed_origins = ["https://shell.example"]
+trusted_proxy_cidrs = ["10.0.0.0/8"]
 unary_rpc_timeout = "10s"
 stream_rpc_timeout = "25s"
-`)
 
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+`, environment, deploymentMode, architectureProbe, secrets, postgres, objectStorage, kms, timeConfig)
+}
+
+func TestConfigRequiresExplicitCapabilitiesAndSections(t *testing.T) {
+	t.Parallel()
+
+	path := writeAPIConfig(t, `schema_version = 1
+revision = "reviewed-1"
+environment = "development"
+deployment_mode = "local"
+cell_id = "local"
+aws_region = "eu-west-2"
+runtime_role = "api"`)
 	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "features") {
-		t.Fatalf("loadConfig error = %v, want incomplete foundation refusal", err)
+	if err == nil || !strings.Contains(err.Error(), "capability") {
+		t.Fatalf("loadConfig error = %v, want incomplete capability refusal", err)
 	}
 }
 
 func TestRunRequiresOneAbsoluteConfigPath(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{
-		nil,
-		{"--config", "api.toml"},
-		{"--config", "/tmp/api.toml", "unexpected"},
-	} {
+	for _, args := range [][]string{nil, {"--config", "api.toml"}, {"--config", "/tmp/api.toml", "unexpected"}} {
 		err := run(context.Background(), args)
 		if err == nil || !strings.Contains(err.Error(), "--config") {
 			t.Fatalf("run(%q) error = %v, want --config usage error", args, err)
@@ -153,19 +156,7 @@ func TestRunRequiresOneAbsoluteConfigPath(t *testing.T) {
 	}
 }
 
-func TestProductionConfigCannotInheritDevelopmentDefaults(t *testing.T) {
-	t.Parallel()
-
-	path := writeAPIConfig(t, `environment = "production"
-`)
-
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "listen_address") {
-		t.Fatalf("loadConfig error = %v, want missing listen_address", err)
-	}
-}
-
-func TestNonProductionConfigIsCompleteAndExplicit(t *testing.T) {
+func TestManagedConfigIsCompleteAndExplicit(t *testing.T) {
 	t.Parallel()
 
 	path := writeAPIConfig(t, completeAPIConfig("staging", false))
@@ -174,22 +165,9 @@ func TestNonProductionConfigIsCompleteAndExplicit(t *testing.T) {
 		t.Fatalf("loadConfig: %v", err)
 	}
 	if loaded.Environment != "staging" || loaded.Addr != "0.0.0.0:8080" ||
-		len(loaded.AllowedOrigins) != 1 || loaded.UnaryRPCDeadline.String() != "10s" ||
-		loaded.StreamRPCDeadline.String() != "25s" {
+		loaded.Foundation.Secrets.Provider != "infisical" || loaded.Foundation.Storage.Provider != "s3" ||
+		len(loaded.Foundation.Fingerprint) != 64 {
 		t.Fatalf("loaded config = %+v", loaded)
-	}
-}
-
-func TestProductionAcceptsOnlyCompleteManagedFoundationProviders(t *testing.T) {
-	t.Parallel()
-
-	path := writeAPIConfig(t, completeAPIConfig("production", false))
-	loaded, err := loadConfig([]string{"--config", path})
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if loaded.Foundation.Secrets.Provider != "infisical" || loaded.Foundation.Storage.Provider != "s3" {
-		t.Fatalf("foundation config = %+v", loaded.Foundation)
 	}
 }
 
@@ -197,97 +175,61 @@ func TestProductionConfigRejectsArchitectureProbe(t *testing.T) {
 	t.Parallel()
 
 	path := writeAPIConfig(t, completeAPIConfig("production", true))
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "architecture_probe") {
+	if _, err := loadConfig([]string{"--config", path}); err == nil || !strings.Contains(err.Error(), "architecture_probe") {
 		t.Fatalf("loadConfig error = %v, want production probe rejection", err)
 	}
 }
 
-func TestConfigRejectsNonOriginCORSValue(t *testing.T) {
+func TestConfigRejectsWrongRuntimeRole(t *testing.T) {
 	t.Parallel()
 
-	contents := strings.Replace(
-		completeAPIConfig("development", false),
-		`https://shell.example`,
-		`https://shell.example/path`,
-		1,
-	)
+	contents := strings.Replace(completeAPIConfig("development", false), `runtime_role = "api"`, `runtime_role = "migrate"`, 1)
 	path := writeAPIConfig(t, contents)
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "allowed_origins") {
-		t.Fatalf("loadConfig error = %v, want invalid origin rejection", err)
+	if _, err := loadConfig([]string{"--config", path}); err == nil || !strings.Contains(err.Error(), "runtime_role") {
+		t.Fatalf("loadConfig error = %v, want role refusal", err)
 	}
 }
 
-func TestConfigRejectsRelativeTLSPaths(t *testing.T) {
+func TestConfigFingerprintUsesExactFileBytes(t *testing.T) {
 	t.Parallel()
 
-	contents := strings.Replace(
-		completeAPIConfig("development", false),
-		`stream_rpc_timeout = "25s"`,
-		`stream_rpc_timeout = "25s"
-tls_certificate_file = "cert.pem"
-tls_private_key_file = "key.pem"`,
-		1,
-	)
+	contents := completeAPIConfig("development", false)
 	path := writeAPIConfig(t, contents)
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "absolute path") {
-		t.Fatalf("loadConfig error = %v, want absolute TLS path rejection", err)
+	first, err := loadConfig([]string{"--config", path})
+	if err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+	second, err := loadConfig([]string{"--config", path})
+	if err != nil {
+		t.Fatalf("second load: %v", err)
+	}
+	if first.Foundation.Fingerprint != second.Foundation.Fingerprint {
+		t.Fatal("unchanged bytes produced different fingerprints")
+	}
+	if err := os.WriteFile(path, []byte(contents+"\n"), 0o600); err != nil {
+		t.Fatalf("change one byte: %v", err)
+	}
+	changed, err := loadConfig([]string{"--config", path})
+	if err != nil {
+		t.Fatalf("changed load: %v", err)
+	}
+	if changed.Foundation.Fingerprint == first.Foundation.Fingerprint {
+		t.Fatal("changed bytes produced the same fingerprint")
 	}
 }
 
-func TestConfigRejectsUnavailableTLSIdentityBeforeBootstrap(t *testing.T) {
+func TestConfigRejectsUnsafeServerAndUnknownFields(t *testing.T) {
 	t.Parallel()
 
-	contents := strings.Replace(
-		completeAPIConfig("development", false),
-		`stream_rpc_timeout = "25s"`,
-		`stream_rpc_timeout = "25s"
-tls_certificate_file = "/definitely-missing/accountable-cert.pem"
-tls_private_key_file = "/definitely-missing/accountable-key.pem"`,
-		1,
-	)
-	path := writeAPIConfig(t, contents)
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "TLS identity") {
-		t.Fatalf("loadConfig error = %v, want unavailable TLS identity refusal", err)
-	}
-}
-
-func TestConfigRejectsUnknownFields(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(t.TempDir(), "api.toml")
-	if err := os.WriteFile(path, []byte(`environment = "development"
-listen_address = "127.0.0.1:8080"
-architecture_probe = false
-allowed_origins = ["http://localhost:3000"]
-trusted_proxy_cidrs = []
-surprise = "not allowed"
-`), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "strict mode") {
-		t.Fatalf("loadConfig error = %v, want unknown field rejection", err)
-	}
-}
-
-func TestConfigRejectsInlineDatabaseSecret(t *testing.T) {
-	t.Parallel()
-
-	contents := strings.Replace(
-		completeAPIConfig("development", false),
-		`password_ref = "database.password"`,
-		`password_ref = "database.password"
-password = "not-allowed-inline"`,
-		1,
-	)
-	path := writeAPIConfig(t, contents)
-	_, err := loadConfig([]string{"--config", path})
-	if err == nil || !strings.Contains(err.Error(), "strict mode") {
-		t.Fatalf("loadConfig error = %v, want inline secret field rejection", err)
+	for name, contents := range map[string]string{
+		"non-origin CORS": strings.Replace(completeAPIConfig("development", false), `https://shell.example`, `https://shell.example/path`, 1),
+		"relative TLS":    strings.Replace(completeAPIConfig("development", false), `stream_rpc_timeout = "25s"`, "stream_rpc_timeout = \"25s\"\ntls_certificate_file = \"cert.pem\"\ntls_private_key_file = \"key.pem\"", 1),
+		"unknown field":   strings.Replace(completeAPIConfig("development", false), `revision = "reviewed-1"`, "revision = \"reviewed-1\"\nsurprise = \"not allowed\"", 1),
+		"inline secret":   strings.Replace(completeAPIConfig("development", false), `password_ref = "database.password"`, "password_ref = \"database.password\"\npassword = \"not-allowed-inline\"", 1),
+	} {
+		path := writeAPIConfig(t, contents)
+		if _, err := loadConfig([]string{"--config", path}); err == nil {
+			t.Errorf("%s: loadConfig accepted unsafe input", name)
+		}
 	}
 }

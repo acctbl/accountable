@@ -8,6 +8,34 @@ import (
 
 const BootstrapProbeFlag = "foundation.bootstrap_probe"
 
+const FlagTypeBoolean = "boolean"
+
+type FlagDeclaration struct {
+	Key         string
+	Type        string
+	Owner       string
+	Purpose     string
+	SafeDefault bool
+	CreatedOn   string
+	ReviewBy    string
+}
+
+var flagDeclarations = map[string]FlagDeclaration{
+	BootstrapProbeFlag: {
+		Key: BootstrapProbeFlag, Type: FlagTypeBoolean, Owner: "Temi",
+		Purpose:     "Enable the non-production foundation architecture probe",
+		SafeDefault: false, CreatedOn: "2026-08-04", ReviewBy: "2026-11-04",
+	},
+}
+
+func Declarations() []FlagDeclaration {
+	declarations := make([]FlagDeclaration, 0, len(flagDeclarations))
+	for _, declaration := range flagDeclarations {
+		declarations = append(declarations, declaration)
+	}
+	return declarations
+}
+
 type FlagEvaluation struct {
 	Enabled   bool
 	Defaulted bool
@@ -30,7 +58,7 @@ func newFeatureFlags(evaluate booleanEvaluator) *FeatureFlags {
 }
 
 func (f *FeatureFlags) BootstrapProbe(ctx context.Context) FlagEvaluation {
-	const safeDefault = false
+	safeDefault := flagDeclarations[BootstrapProbeFlag].SafeDefault
 	value, defaulted, err := f.evaluate(ctx, BootstrapProbeFlag, safeDefault)
 	if err != nil {
 		return FlagEvaluation{Enabled: safeDefault, Defaulted: true}

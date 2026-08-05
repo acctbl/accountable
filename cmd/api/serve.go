@@ -21,6 +21,7 @@ import (
 	"github.com/acctbl/accountable/internal/modules/system"
 	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/acctbl/accountable/internal/server"
+	"github.com/google/uuid"
 )
 
 const (
@@ -34,6 +35,7 @@ const (
 	uploadBodyMaxBytes      = 16 << 20
 	maxHeaderBytes          = 64 << 10
 	maxConnections          = 128
+	releaseID               = "dev"
 )
 
 type config = appconfig.API
@@ -59,8 +61,8 @@ func newAPIHandlerWithSystem(
 	systemServer systemv1connect.SystemServiceHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /live", healthHandler(func() bool { return true }))
-	mux.HandleFunc("GET /ready", healthHandler(ready.IsReady))
+	mux.HandleFunc("GET /_health/live", healthHandler(func() bool { return true }))
+	mux.HandleFunc("GET /_health/ready", healthHandler(ready.IsReady))
 
 	boundary := server.BoundaryInterceptor{}
 	deadline := server.DeadlineInterceptor{
@@ -100,15 +102,26 @@ func newAPIHandlerWithSystem(
 	return credentialedCORSMiddleware(config.AllowedOrigins, handler)
 }
 
+type healthResponse struct {
+	Status    string `json:"status"`
+	ReleaseID string `json:"release_id"`
+	RequestID string `json:"request_id"`
+}
+
 func healthHandler(healthy func() bool) http.HandlerFunc {
 	return func(response http.ResponseWriter, _ *http.Request) {
 		response.Header().Set("Cache-Control", "no-store")
 		response.Header().Set("Content-Type", "application/json")
+		requestID, err := uuid.NewV7()
+		if err != nil {
+			requestID = uuid.Nil
+		}
+		response.Header().Set("X-Request-ID", requestID.String())
 		status := http.StatusOK
-		payload := map[string]string{"status": "ok"}
+		payload := healthResponse{Status: "ok", ReleaseID: releaseID, RequestID: requestID.String()}
 		if !healthy() {
 			status = http.StatusServiceUnavailable
-			payload["status"] = "not_ready"
+			payload.Status = "not_ready"
 		}
 		response.WriteHeader(status)
 		_ = json.NewEncoder(response).Encode(payload)
@@ -264,7 +277,7 @@ func monitorDependencies(
 	dependencies dependencySet,
 	ready *readiness,
 ) {
-	ticker := time.NewTicker(config.Database.HealthCheckInterval)
+	ticker := time.NewTicker(config.ReadinessProbeInterval)
 	defer ticker.Stop()
 	for {
 		select {

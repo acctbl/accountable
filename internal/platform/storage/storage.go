@@ -12,6 +12,18 @@ var ErrStorageUnavailable = errors.New("storage is unavailable")
 
 type Storage interface {
 	Check(context.Context) error
+	Probe(context.Context) error
+}
+
+func (s *FileStorage) Probe(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	info, err := os.Lstat(s.root)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o200 == 0 {
+		return ErrStorageUnavailable
+	}
+	return nil
 }
 
 type FileStorage struct{ root string }

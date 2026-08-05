@@ -24,24 +24,53 @@ printf '%s' "$ACCOUNTABLE_TEST_POSTGRES_PASSWORD" >"$SECRETS_DIR/database.passwo
 openssl rand -base64 32 >"$SECRETS_DIR/crypto.primary_key"
 chmod 0600 "$SECRETS_DIR/database.password" "$SECRETS_DIR/crypto.primary_key"
 
-cat >"$API_CONFIG" <<EOF
+write_foundation() {
+	local role="$1"
+	cat <<EOF
+schema_version = 1
+revision = "development"
 environment = "development"
+deployment_mode = "local"
+cell_id = "local"
+aws_region = "eu-west-2"
+runtime_role = "$role"
+foundation_check_timeout = "30s"
+readiness_probe_interval = "2s"
+
+[capabilities]
+architecture_probe = $([ "$role" = "api" ] && printf true || printf false)
+postgres = true
+secrets = true
+kms = true
+object_storage = true
+telemetry = false
+redpanda = false
+EOF
+}
+
+{
+	write_foundation api
+	cat <<EOF
+
+[server]
 listen_address = "127.0.0.1:8080"
-architecture_probe = true
 allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 trusted_proxy_cidrs = []
 unary_rpc_timeout = "10s"
 stream_rpc_timeout = "25s"
-foundation_check_timeout = "30s"
+EOF
+} >"$API_CONFIG"
 
-[features]
-provider = "noop"
+write_foundation migrate >"$MIGRATE_CONFIG"
+
+for config in "$API_CONFIG" "$MIGRATE_CONFIG"; do
+	cat >>"$config" <<EOF
 
 [secrets]
 provider = "file"
 directory = "$SECRETS_DIR"
 
-[database]
+[postgres]
 host = "$ACCOUNTABLE_TEST_POSTGRES_HOST"
 port = $ACCOUNTABLE_TEST_POSTGRES_PORT
 name = "$ACCOUNTABLE_TEST_POSTGRES_DATABASE"
@@ -55,58 +84,22 @@ health_check_interval = "2s"
 max_connections = 16
 timezone = "UTC"
 
-[storage]
+[object_storage]
 provider = "filesystem"
 root = "$STORAGE_DIR"
+access_purpose = "foundation-proof"
 
-[crypto]
+[kms]
 provider = "local"
 key_ref = "crypto.primary_key"
+encryption_context_prefix = "accountable.foundation"
 
 [time]
 provider = "system"
 max_clock_error = "1s"
 max_database_skew = "5s"
 EOF
-
-cat >"$MIGRATE_CONFIG" <<EOF
-environment = "development"
-foundation_check_timeout = "30s"
-
-[features]
-provider = "noop"
-
-[secrets]
-provider = "file"
-directory = "$SECRETS_DIR"
-
-[database]
-host = "$ACCOUNTABLE_TEST_POSTGRES_HOST"
-port = $ACCOUNTABLE_TEST_POSTGRES_PORT
-name = "$ACCOUNTABLE_TEST_POSTGRES_DATABASE"
-user = "$ACCOUNTABLE_TEST_POSTGRES_USER"
-role = "$ACCOUNTABLE_TEST_POSTGRES_USER"
-password_ref = "database.password"
-tls_mode = "disable"
-connect_timeout = "5s"
-statement_timeout = "10s"
-health_check_interval = "2s"
-max_connections = 16
-timezone = "UTC"
-
-[storage]
-provider = "filesystem"
-root = "$STORAGE_DIR"
-
-[crypto]
-provider = "local"
-key_ref = "crypto.primary_key"
-
-[time]
-provider = "system"
-max_clock_error = "1s"
-max_database_skew = "5s"
-EOF
+done
 
 go run ./cmd/migrate --config "$MIGRATE_CONFIG"
 go run ./cmd/preflight --config "$API_CONFIG"

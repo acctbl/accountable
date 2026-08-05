@@ -72,6 +72,12 @@ cp "testdata/negative/arch/bad_domain_http_import.go" "$BAD_DOMAIN_DIR/z_negativ
 prove domain-http-import task lint
 rm -rf "internal/modules/negativetest"
 
+echo "==> negative: module imports secret provider internals"
+BAD_MODULE_SECRET="internal/modules/probe/z_negative_secret_import.go"
+cp "testdata/negative/arch/bad_module_secret_import.go" "$BAD_MODULE_SECRET"
+prove module-secret-import task lint
+rm -f "$BAD_MODULE_SECRET"
+
 echo "==> negative: time.Now outside clock adapter"
 BAD_TIME_NOW="internal/server/z_negative_time_now.go"
 cp "testdata/negative/arch/bad_time_now.go" "$BAD_TIME_NOW"
@@ -85,9 +91,16 @@ prove forbidden-timestamppb-now task lint
 rm -f "$BAD_TSPB_NOW"
 
 echo "==> negative: invalid migration"
-BAD_MIGRATION="internal/platform/database/migrations/99999_bad.sql"
+BAD_MIGRATION="internal/platform/database/migrations/20991231235959_negative_bad.sql"
 cp "testdata/negative/migrate/00001_bad.sql" "$BAD_MIGRATION"
 prove invalid-migration task migrations:check
+rm -f "$BAD_MIGRATION"
+
+echo "==> negative: invalid migration filename"
+BAD_MIGRATION_FILENAME="internal/platform/database/migrations/bad_filename.sql"
+cp "testdata/negative/migrate/bad_filename.sql" "$BAD_MIGRATION_FILENAME"
+prove invalid-migration-filename task migrations:check
+rm -f "$BAD_MIGRATION_FILENAME"
 
 echo "==> negative: missing translation"
 AR="apps/web/src/i18n/messages/ar.json"

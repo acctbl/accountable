@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,12 +14,14 @@ import (
 )
 
 type fakeS3 struct {
-	public    bool
-	keyARN    string
-	object    []byte
-	deleted   bool
-	putErr    error
-	deleteErr error
+	public           bool
+	keyARN           string
+	object           []byte
+	deleted          bool
+	putErr           error
+	deleteErr        error
+	putKey           string
+	encryptionChecks int
 }
 
 func (f *fakeS3) GetPublicAccessBlock(context.Context, *s3.GetPublicAccessBlockInput, ...func(*s3.Options)) (*s3.GetPublicAccessBlockOutput, error) {
@@ -29,6 +32,7 @@ func (f *fakeS3) GetPublicAccessBlock(context.Context, *s3.GetPublicAccessBlockI
 }
 
 func (f *fakeS3) GetBucketEncryption(context.Context, *s3.GetBucketEncryptionInput, ...func(*s3.Options)) (*s3.GetBucketEncryptionOutput, error) {
+	f.encryptionChecks++
 	return &s3.GetBucketEncryptionOutput{ServerSideEncryptionConfiguration: &types.ServerSideEncryptionConfiguration{
 		Rules: []types.ServerSideEncryptionRule{{ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
 			SSEAlgorithm: types.ServerSideEncryptionAwsKms, KMSMasterKeyID: aws.String(f.keyARN),
@@ -48,6 +52,7 @@ func (f *fakeS3) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...fun
 		return nil, err
 	}
 	f.object = value
+	f.putKey = aws.ToString(input.Key)
 	return &s3.PutObjectOutput{}, nil
 }
 
@@ -72,6 +77,22 @@ func TestS3StoragePreflightProvesPrivateKMSRoundTripAndCleanup(t *testing.T) {
 	if !client.deleted {
 		t.Fatal("preflight object was not deleted")
 	}
+	if !strings.Contains(client.putKey, "/.accountable-preflight/foundation-proof/") {
+		t.Fatalf("preflight key = %q, want access purpose", client.putKey)
+	}
+}
+
+func TestS3StorageProbeChecksOnlyPublicAccessBlock(t *testing.T) {
+	t.Parallel()
+
+	config := managedConfig()
+	client := &fakeS3{public: true, keyARN: config.KMSKeyARN}
+	if err := newS3Storage(config, client).Probe(context.Background()); err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if client.encryptionChecks != 0 || client.object != nil {
+		t.Fatalf("Probe performed expensive work: encryption=%d object=%q", client.encryptionChecks, client.object)
+	}
 }
 
 func TestS3StorageRefusesUnsafeBucketConfiguration(t *testing.T) {
@@ -92,5 +113,6 @@ func managedConfig() Config {
 	return Config{
 		Provider: ProviderS3, Region: "eu-west-2", Bucket: "accountable-private", Prefix: "application/",
 		ExpectedOwner: "123456789012", KMSKeyARN: "arn:aws:kms:eu-west-2:123456789012:key/11111111-1111-1111-1111-111111111111",
+		AccessPurpose: "foundation-proof",
 	}
 }

@@ -2,24 +2,18 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/acctbl/accountable/internal/appconfig"
 	"github.com/acctbl/accountable/internal/bootstrap"
-	"github.com/acctbl/accountable/internal/configfile"
 	"github.com/acctbl/accountable/internal/migration"
 	"github.com/acctbl/accountable/internal/platform/clock"
 	"github.com/acctbl/accountable/internal/platform/database"
 	"github.com/acctbl/accountable/internal/platform/secret"
 )
-
-type fileConfig struct {
-	bootstrap.FileConfig
-	Environment string `toml:"environment"`
-}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -31,21 +25,18 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
-	path, err := configfile.AbsolutePath(args)
+	config, err := appconfig.LoadFoundation(args, bootstrap.RuntimeRoleMigrate)
 	if err != nil {
 		return err
 	}
-	var raw fileConfig
-	if err := configfile.Decode(path, &raw); err != nil {
-		return err
+	if !config.Capabilities.Secrets || !config.Capabilities.Postgres {
+		return fmt.Errorf("migrate requires secrets and postgres capabilities")
 	}
-	if raw.Environment != "development" && raw.Environment != "staging" && raw.Environment != "production" {
-		return errors.New("environment must be development, staging, or production")
-	}
-	config, err := bootstrap.Parse(raw.Environment, path, raw.FileConfig)
-	if err != nil {
-		return err
-	}
+	fmt.Printf(
+		"configuration: environment=%s deployment_mode=%s cell=%s role=%s revision=%s fingerprint=%s\n",
+		config.Environment, config.DeploymentMode, config.CellID, config.RuntimeRole, config.Revision,
+		config.Fingerprint,
+	)
 	source, err := secret.NewSource(ctx, config.Secrets, clock.System{})
 	if err != nil {
 		return err

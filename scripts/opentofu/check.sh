@@ -54,7 +54,14 @@ roots=(
 for root in "${roots[@]}"; do
 	(
 		cd "$validation_root/$root"
-		if rg -q 'required_providers' .; then
+		has_required_providers=0
+		while IFS= read -r -d '' file; do
+			if grep -q 'required_providers' "$file"; then
+				has_required_providers=1
+				break
+			fi
+		done < <(find . -type f -name '*.tf' -print0)
+		if [[ "$has_required_providers" == "1" ]]; then
 			cp "$validation_root/.terraform.lock.hcl" .terraform.lock.hcl
 			TF_DATA_DIR="$validation_root/.terraform-data/$root" tofu init \
 				-backend=false -input=false -lockfile=readonly -plugin-dir="$plugin_dir"

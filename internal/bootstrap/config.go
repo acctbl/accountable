@@ -22,6 +22,8 @@ const (
 	RuntimeRoleAPI               = "api"
 	RuntimeRoleMigrate           = "migrate"
 	RuntimeRolePreflight         = "preflight"
+	DeploymentModeLocal          = "local"
+	DeploymentModeManaged        = "managed"
 	AccessPurposeFoundationProof = "foundation-proof"
 
 	infisicalCloudEUEndpoint = secret.InfisicalCloudEUEndpoint
@@ -41,6 +43,7 @@ type Config struct {
 	SchemaVersion          int
 	Revision               string
 	Environment            string
+	DeploymentMode         string
 	CellID                 string
 	AWSRegion              string
 	RuntimeRole            string
@@ -73,6 +76,7 @@ type FileConfig struct {
 	SchemaVersion          int                    `toml:"schema_version"`
 	Revision               string                 `toml:"revision"`
 	Environment            string                 `toml:"environment"`
+	DeploymentMode         string                 `toml:"deployment_mode"`
 	CellID                 string                 `toml:"cell_id"`
 	AWSRegion              string                 `toml:"aws_region"`
 	RuntimeRole            string                 `toml:"runtime_role"`
@@ -159,6 +163,13 @@ func Parse(configPath, fingerprint string, raw FileConfig) (Config, error) {
 	if raw.Environment != "development" && raw.Environment != "staging" && raw.Environment != "production" {
 		return Config{}, errors.New("environment must be development, staging, or production")
 	}
+	if raw.DeploymentMode != DeploymentModeLocal && raw.DeploymentMode != DeploymentModeManaged {
+		return Config{}, errors.New("deployment_mode must be local or managed")
+	}
+	managed := raw.DeploymentMode == DeploymentModeManaged
+	if raw.Environment != "development" && !managed {
+		return Config{}, errors.New("staging and production deployment_mode must be managed")
+	}
 	if !cellIDPattern.MatchString(raw.CellID) {
 		return Config{}, errors.New("cell_id must be 1 to 64 opaque identifier characters")
 	}
@@ -178,8 +189,8 @@ func Parse(configPath, fingerprint string, raw FileConfig) (Config, error) {
 	if capabilities.Postgres && !capabilities.Secrets {
 		return Config{}, errors.New("capabilities.postgres requires capabilities.secrets")
 	}
-	if raw.Environment == "development" && capabilities.KMS && !capabilities.Secrets {
-		return Config{}, errors.New("development capabilities.kms requires capabilities.secrets")
+	if !managed && capabilities.KMS && !capabilities.Secrets {
+		return Config{}, errors.New("local capabilities.kms requires capabilities.secrets")
 	}
 	checkTimeout, err := parsePositiveDuration("foundation_check_timeout", raw.CheckTimeout)
 	if err != nil {
@@ -189,7 +200,6 @@ func Parse(configPath, fingerprint string, raw FileConfig) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	managed := raw.Environment == "staging" || raw.Environment == "production"
 	var secretsConfig secret.Config
 	if capabilities.Secrets {
 		secretsConfig, err = parseSecrets(raw.Environment, managed, raw.AWSRegion, configPath, *raw.Secrets)
@@ -224,7 +234,8 @@ func Parse(configPath, fingerprint string, raw FileConfig) (Config, error) {
 	}
 	return Config{
 		SchemaVersion: raw.SchemaVersion, Revision: raw.Revision, Environment: raw.Environment,
-		CellID: raw.CellID, AWSRegion: raw.AWSRegion, RuntimeRole: raw.RuntimeRole, Fingerprint: fingerprint,
+		DeploymentMode: raw.DeploymentMode, CellID: raw.CellID, AWSRegion: raw.AWSRegion,
+		RuntimeRole: raw.RuntimeRole, Fingerprint: fingerprint,
 		Capabilities: capabilities, CheckTimeout: checkTimeout, ReadinessProbeInterval: readinessProbeInterval,
 		Secrets: secretsConfig, Database: databaseConfig, Storage: storageConfig, Crypto: cryptoConfig, Time: timeConfig,
 	}, nil
@@ -271,7 +282,7 @@ func parseCapabilities(raw FileConfig) (Capabilities, error) {
 func parseSecrets(environment string, managed bool, awsRegion, configPath string, raw SecretsFileConfig) (secret.Config, error) {
 	if !managed {
 		if raw.Provider != secret.ProviderFile || raw.Directory == "" {
-			return secret.Config{}, errors.New("development secrets.provider must be file with a directory")
+			return secret.Config{}, errors.New("local secrets.provider must be file with a directory")
 		}
 		if raw.SiteURL != "" || raw.AWSRegion != "" || raw.ProjectID != "" || raw.Environment != "" ||
 			raw.SecretPath != "" || raw.AuthMethod != "" || raw.MachineIdentityID != "" {
@@ -283,11 +294,11 @@ func parseSecrets(environment string, managed bool, awsRegion, configPath string
 		return secret.Config{}, errors.New("infisical secrets cannot include a file directory")
 	}
 	if raw.Provider != secret.ProviderInfisical {
-		return secret.Config{}, errors.New("staging and production secrets.provider must be infisical")
+		return secret.Config{}, errors.New("managed secrets.provider must be infisical")
 	}
 	parsedURL, err := url.Parse(raw.SiteURL)
 	if err != nil || parsedURL.String() != infisicalCloudEUEndpoint {
-		return secret.Config{}, errors.New("staging and production secrets.site_url must select managed Infisical Cloud EU")
+		return secret.Config{}, errors.New("managed secrets.site_url must select Infisical Cloud EU")
 	}
 	if !awsRegionPattern.MatchString(raw.AWSRegion) {
 		return secret.Config{}, errors.New("infisical aws_region is invalid")
@@ -331,10 +342,10 @@ func parseDatabase(managed bool, configPath string, raw DatabaseFileConfig) (dat
 		return database.Config{}, fmt.Errorf("database.password_ref: %w", err)
 	}
 	if managed && raw.TLSMode != database.TLSVerifyFull {
-		return database.Config{}, errors.New("staging and production database.tls_mode must be verify-full")
+		return database.Config{}, errors.New("managed database.tls_mode must be verify-full")
 	}
 	if !managed && raw.TLSMode != database.TLSDisable {
-		return database.Config{}, errors.New("development database.tls_mode must be disable")
+		return database.Config{}, errors.New("local database.tls_mode must be disable")
 	}
 	rootCA := ""
 	if raw.TLSRootCAFile != "" {
@@ -381,7 +392,7 @@ func parseStorage(managed bool, awsRegion, configPath string, raw StorageFileCon
 	}
 	if !managed {
 		if raw.Provider != storage.ProviderFile || raw.Root == "" {
-			return storage.Config{}, errors.New("development object_storage.provider must be filesystem with a root")
+			return storage.Config{}, errors.New("local object_storage.provider must be filesystem with a root")
 		}
 		if raw.Region != "" || raw.Bucket != "" || raw.Prefix != "" || raw.ExpectedOwner != "" || raw.KMSKeyARN != "" {
 			return storage.Config{}, errors.New("filesystem object storage cannot include S3 settings")
@@ -392,7 +403,7 @@ func parseStorage(managed bool, awsRegion, configPath string, raw StorageFileCon
 		}, nil
 	}
 	if raw.Provider != storage.ProviderS3 {
-		return storage.Config{}, errors.New("staging and production object_storage.provider must be s3")
+		return storage.Config{}, errors.New("managed object_storage.provider must be s3")
 	}
 	if raw.Root != "" {
 		return storage.Config{}, errors.New("S3 object storage cannot include a filesystem root")
@@ -422,7 +433,7 @@ func parseCrypto(managed bool, awsRegion string, raw CryptoFileConfig) (crypto.C
 	}
 	if !managed {
 		if raw.Provider != crypto.ProviderLocal {
-			return crypto.Config{}, errors.New("development kms.provider must be local")
+			return crypto.Config{}, errors.New("local kms.provider must be local")
 		}
 		keyRef, err := secret.ParseRef(raw.KeyRef)
 		if err != nil {
@@ -436,7 +447,7 @@ func parseCrypto(managed bool, awsRegion string, raw CryptoFileConfig) (crypto.C
 		}, nil
 	}
 	if raw.Provider != crypto.ProviderAWSKMS {
-		return crypto.Config{}, errors.New("staging and production kms.provider must be aws_kms")
+		return crypto.Config{}, errors.New("managed kms.provider must be aws_kms")
 	}
 	if raw.KeyRef != "" {
 		return crypto.Config{}, errors.New("AWS KMS cannot include a local key reference")
@@ -462,7 +473,7 @@ func parseTime(managed bool, raw TimeFileConfig) (TimeConfig, error) {
 		wantProvider = TimeProviderLinux
 	}
 	if raw.Provider != wantProvider {
-		return TimeConfig{}, fmt.Errorf("time.provider must be %s for this environment", wantProvider)
+		return TimeConfig{}, fmt.Errorf("time.provider must be %s for this deployment mode", wantProvider)
 	}
 	maxClockError, err := parsePositiveDuration("time.max_clock_error", raw.MaxClockError)
 	if err != nil {

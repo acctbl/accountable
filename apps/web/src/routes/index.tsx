@@ -5,6 +5,8 @@ import { FormattedMessage, useIntl } from "react-intl";
 import { useApi } from "@/lib/api";
 import { formatApiError } from "@/lib/api-error";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { Button } from "@accountable/ui/components/button";
+import { PlusIcon } from "@phosphor-icons/react";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -26,13 +28,22 @@ function Home() {
 	return (
 		<main id="main-content" className="flex min-h-svh" tabIndex={-1}>
 			<div className="min-w-0 space-y-2 p-6">
-				<LocaleSwitcher />
+				<h1 className="sr-only">
+					<FormattedMessage id="home.title" defaultMessage="Accountable" />
+				</h1>
+				<div className="flex items-center">
+					<LocaleSwitcher />
+					<Button size="icon" variant="ghost">
+						<PlusIcon />
+					</Button>
+				</div>
 				<p>
 					<FormattedMessage
 						id="home.description"
 						defaultMessage="Local transport shell"
 					/>
 				</p>
+
 				<p role="status" aria-live="polite" data-testid="runtime-status">
 					{runtime.isPending ? (
 						<FormattedMessage

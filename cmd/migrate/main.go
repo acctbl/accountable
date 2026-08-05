@@ -33,8 +33,9 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("migrate requires secrets and postgres capabilities")
 	}
 	fmt.Printf(
-		"configuration: environment=%s cell=%s role=%s revision=%s fingerprint=%s\n",
-		config.Environment, config.CellID, config.RuntimeRole, config.Revision, config.Fingerprint,
+		"configuration: environment=%s deployment_mode=%s cell=%s role=%s revision=%s fingerprint=%s\n",
+		config.Environment, config.DeploymentMode, config.CellID, config.RuntimeRole, config.Revision,
+		config.Fingerprint,
 	)
 	source, err := secret.NewSource(ctx, config.Secrets, clock.System{})
 	if err != nil {

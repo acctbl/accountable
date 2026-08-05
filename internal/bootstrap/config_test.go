@@ -30,8 +30,24 @@ func TestParseAcceptsExplicitManagedFoundation(t *testing.T) {
 	if config.Database.PasswordRef != "database/password" || config.Database.TLSMode != database.TLSVerifyFull ||
 		config.Secrets.Provider != secret.ProviderInfisical || config.Storage.Provider != storage.ProviderS3 ||
 		config.Crypto.Provider != crypto.ProviderAWSKMS || config.Time.Provider != TimeProviderLinux ||
-		config.Fingerprint != "fingerprint" || config.Revision != "reviewed-1" {
+		config.DeploymentMode != DeploymentModeManaged || config.Fingerprint != "fingerprint" ||
+		config.Revision != "reviewed-1" {
 		t.Fatalf("managed config = %+v", config)
+	}
+}
+
+func TestParseAcceptsManagedDevelopmentFoundation(t *testing.T) {
+	t.Parallel()
+
+	raw := managedFileConfig()
+	raw.Environment = "development"
+	raw.Secrets.Environment = "development"
+	config, err := Parse("/etc/accountable/api.toml", "fingerprint", raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if config.Environment != "development" || config.DeploymentMode != DeploymentModeManaged {
+		t.Fatalf("managed development config = %+v", config)
 	}
 }
 
@@ -43,6 +59,18 @@ func TestParseRefusesLocalProvidersInStaging(t *testing.T) {
 	_, err := Parse("/tmp/api.toml", "fingerprint", raw)
 	if err == nil {
 		t.Fatalf("Parse error = %v, want managed-provider refusal", err)
+	}
+}
+
+func TestParseRefusesLocalDeploymentOutsideDevelopment(t *testing.T) {
+	t.Parallel()
+
+	for _, environment := range []string{"staging", "production"} {
+		raw := developmentFileConfig()
+		raw.Environment = environment
+		if _, err := Parse("/tmp/api.toml", "fingerprint", raw); err == nil {
+			t.Errorf("Parse accepted local %s deployment", environment)
+		}
 	}
 }
 
@@ -93,7 +121,8 @@ func TestParseRefusesAWSRegionMismatch(t *testing.T) {
 
 func managedFileConfig() FileConfig {
 	return FileConfig{
-		SchemaVersion: 1, Revision: "reviewed-1", Environment: "production", CellID: "cell-a",
+		SchemaVersion: 1, Revision: "reviewed-1", Environment: "production",
+		DeploymentMode: DeploymentModeManaged, CellID: "cell-a",
 		AWSRegion: "eu-west-2", RuntimeRole: RuntimeRoleAPI, CheckTimeout: "30s", ReadinessProbeInterval: "10s",
 		Capabilities: completeCapabilities(false),
 		Secrets: &SecretsFileConfig{
@@ -122,7 +151,8 @@ func managedFileConfig() FileConfig {
 
 func developmentFileConfig() FileConfig {
 	return FileConfig{
-		SchemaVersion: 1, Revision: "reviewed-1", Environment: "development", CellID: "local",
+		SchemaVersion: 1, Revision: "reviewed-1", Environment: "development",
+		DeploymentMode: DeploymentModeLocal, CellID: "local",
 		AWSRegion: "eu-west-2", RuntimeRole: RuntimeRoleAPI, CheckTimeout: "10s", ReadinessProbeInterval: "1s",
 		Capabilities: completeCapabilities(true),
 		Secrets:      &SecretsFileConfig{Provider: secret.ProviderFile, Directory: "secrets"},

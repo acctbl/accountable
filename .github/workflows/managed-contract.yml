@@ -1,0 +1,74 @@
+name: Managed adapter contract
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/managed-contract.yml"
+      - "Taskfile.yml"
+      - "go.mod"
+      - "go.sum"
+      - "internal/platform/awsconfig/**"
+      - "internal/platform/crypto/**"
+      - "internal/platform/secret/**"
+      - "internal/platform/storage/**"
+      - "infra/opentofu/bootstrap/development/**"
+      - "infra/opentofu/development/**"
+  push:
+    branches: [develop, main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: managed-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: development
+    env:
+      AWS_ROLE_ARN: ${{ vars.AWS_CONTRACT_ROLE_ARN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+      ACCOUNTABLE_MANAGED_CONTRACT_AWS_REGION: ${{ vars.AWS_REGION }}
+      ACCOUNTABLE_MANAGED_CONTRACT_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ACCOUNTABLE_MANAGED_CONTRACT_S3_BUCKET: ${{ vars.S3_BUCKET }}
+      ACCOUNTABLE_MANAGED_CONTRACT_S3_INSECURE_BUCKET: ${{ vars.S3_INSECURE_BUCKET }}
+      ACCOUNTABLE_MANAGED_CONTRACT_STORAGE_KMS_KEY_ARN: ${{ vars.STORAGE_KMS_KEY_ARN }}
+      ACCOUNTABLE_MANAGED_CONTRACT_CRYPTO_KMS_KEY_ARN: ${{ vars.CRYPTO_KMS_KEY_ARN }}
+      ACCOUNTABLE_MANAGED_CONTRACT_INFISICAL_PROJECT_ID: ${{ vars.INFISICAL_PROJECT_ID }}
+      ACCOUNTABLE_MANAGED_CONTRACT_INFISICAL_MACHINE_IDENTITY_ID: ${{ vars.INFISICAL_MACHINE_IDENTITY_ID }}
+      ACCOUNTABLE_MANAGED_CONTRACT_INFISICAL_SECRET_PATH: ${{ vars.INFISICAL_SECRET_PATH }}
+      ACCOUNTABLE_MANAGED_CONTRACT_INFISICAL_SECRET_NAME: ${{ vars.INFISICAL_SECRET_NAME }}
+      ACCOUNTABLE_MANAGED_CONTRACT_INFISICAL_SECRET_SHA256: ${{ vars.INFISICAL_SECRET_SHA256 }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: 2026.7.13
+
+      - name: Request AWS web identity token
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const token = await core.getIDToken("sts.amazonaws.com");
+            const tokenPath = path.join(process.env.RUNNER_TEMP, "aws-web-identity-token");
+            fs.writeFileSync(tokenPath, token, { mode: 0o600 });
+            core.exportVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenPath);
+
+      - name: Prove managed adapter contracts
+        run: |
+          mise trust mise.toml
+          mise exec -- task test:managed-contract

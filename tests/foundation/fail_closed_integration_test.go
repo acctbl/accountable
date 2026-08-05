@@ -218,6 +218,7 @@ func developmentAPIConfig(host string, port uint16, name, user, secrets, storage
 	return fmt.Sprintf(`schema_version = 1
 revision = "integration"
 environment = "development"
+deployment_mode = "local"
 cell_id = "local"
 aws_region = "eu-west-2"
 runtime_role = "api"
@@ -279,6 +280,7 @@ func managedRegionMismatchConfig() string {
 	return `schema_version = 1
 revision = "integration"
 environment = "production"
+deployment_mode = "managed"
 cell_id = "cell-a"
 aws_region = "eu-west-2"
 runtime_role = "api"

@@ -19,7 +19,10 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 )
 
-var ErrSecretSourceUnavailable = errors.New("secret source is unavailable")
+var (
+	ErrSecretSourceUnavailable = errors.New("secret source is unavailable")
+	errInfisicalSecretNotFound = errors.New("infisical secret is not found")
+)
 
 type infisicalAPI interface {
 	Login(context.Context) (string, error)
@@ -27,6 +30,14 @@ type infisicalAPI interface {
 }
 
 type InfisicalSecretSource struct{ api infisicalAPI }
+
+type infisicalStoreAPI interface {
+	Login(context.Context) (string, error)
+	Read(context.Context, string, Ref) ([]byte, error)
+	Create(context.Context, string, Ref, []byte) error
+}
+
+type InfisicalSecretStore struct{ api infisicalStoreAPI }
 
 func NewInfisicalSecretSource(
 	config Config,
@@ -41,6 +52,58 @@ func NewInfisicalSecretSource(
 
 func newInfisicalSecretSource(api infisicalAPI) *InfisicalSecretSource {
 	return &InfisicalSecretSource{api: api}
+}
+
+func NewInfisicalSecretStore(
+	config Config,
+	client *http.Client,
+	credentials aws.CredentialsProvider,
+	clock clock.Clock,
+) *InfisicalSecretStore {
+	return &InfisicalSecretStore{api: &infisicalHTTPAPI{
+		config: config, client: client, credentials: credentials, clock: clock, signer: v4.NewSigner(),
+	}}
+}
+
+func newInfisicalSecretStore(api infisicalStoreAPI) *InfisicalSecretStore {
+	return &InfisicalSecretStore{api: api}
+}
+
+func (s *InfisicalSecretStore) ResolveOrCreateBatch(
+	ctx context.Context,
+	refs []Ref,
+	generate func(Ref) ([]byte, error),
+) (map[Ref]SecretValue, error) {
+	if len(refs) == 0 || generate == nil {
+		return nil, ErrSecretSourceUnavailable
+	}
+	token, err := s.api.Login(ctx)
+	if err != nil || token == "" {
+		return nil, ErrSecretSourceUnavailable
+	}
+	values := make(map[Ref]SecretValue, len(refs))
+	for _, ref := range refs {
+		if _, err := ParseRef(string(ref)); err != nil {
+			return nil, ErrSecretSourceUnavailable
+		}
+		if _, duplicate := values[ref]; duplicate {
+			return nil, ErrSecretSourceUnavailable
+		}
+		value, err := s.api.Read(ctx, token, ref)
+		if errors.Is(err, errInfisicalSecretNotFound) {
+			value, err = generate(ref)
+			if err == nil && len(value) > 0 && len(value) <= maximumSecretBytes {
+				err = s.api.Create(ctx, token, ref, value)
+			}
+		}
+		if err != nil || len(value) == 0 || len(value) > maximumSecretBytes {
+			clear(value)
+			return nil, ErrSecretSourceUnavailable
+		}
+		values[ref] = NewSecretValue(value)
+		clear(value)
+	}
+	return values, nil
 }
 
 func (s *InfisicalSecretSource) ResolveBatch(ctx context.Context, refs []Ref) (map[Ref]SecretValue, error) {
@@ -159,10 +222,43 @@ func (a *infisicalHTTPAPI) Read(ctx context.Context, token string, ref Ref) ([]b
 			Value string `json:"secretValue"`
 		} `json:"secret"`
 	}
-	if err := a.doJSON(request, &response); err != nil || response.Secret.Key != string(ref) || response.Secret.Value == "" {
+	if err := a.doJSON(request, &response); err != nil {
+		return nil, err
+	}
+	if response.Secret.Key != string(ref) || response.Secret.Value == "" {
 		return nil, ErrSecretSourceUnavailable
 	}
 	return []byte(response.Secret.Value), nil
+}
+
+func (a *infisicalHTTPAPI) Create(ctx context.Context, token string, ref Ref, value []byte) error {
+	endpoint := a.config.SiteURL + "/api/v4/secrets/" + url.PathEscape(string(ref))
+	payload, err := json.Marshal(map[string]any{
+		"environment":           a.config.Environment,
+		"projectId":             a.config.ProjectID,
+		"secretPath":            a.config.SecretPath,
+		"secretValue":           string(value),
+		"skipMultilineEncoding": true,
+		"type":                  "shared",
+	})
+	if err != nil {
+		return ErrSecretSourceUnavailable
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return ErrSecretSourceUnavailable
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	var response struct {
+		Secret struct {
+			Key string `json:"secretKey"`
+		} `json:"secret"`
+	}
+	if err := a.doJSON(request, &response); err != nil || response.Secret.Key != string(ref) {
+		return ErrSecretSourceUnavailable
+	}
+	return nil
 }
 
 func (a *infisicalHTTPAPI) doJSON(request *http.Request, target any) error {
@@ -173,6 +269,9 @@ func (a *infisicalHTTPAPI) doJSON(request *http.Request, target any) error {
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
+		if response.StatusCode == http.StatusNotFound {
+			return errInfisicalSecretNotFound
+		}
 		return fmt.Errorf("%w: HTTP %s", ErrSecretSourceUnavailable, strconv.Itoa(response.StatusCode))
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, maximumSecretBytes+(4<<10)))

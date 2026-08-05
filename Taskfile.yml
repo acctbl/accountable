@@ -45,22 +45,22 @@ tasks:
   format:
     desc: Apply Go and Biome formatting
     cmds:
-      - gofmt -w cmd internal
-      - goimports -w cmd internal
+      - gofmt -w cmd internal scripts/opentofu/aws-account-mock
+      - goimports -w cmd internal scripts/opentofu/aws-account-mock
       - pnpm format
 
   format:check:
     desc: Check formatting (Go + Biome)
     cmds:
       - |
-        unformatted="$(gofmt -l cmd internal)"
+        unformatted="$(gofmt -l cmd internal scripts/opentofu/aws-account-mock)"
         if [ -n "$unformatted" ]; then
           echo "gofmt needed on:" >&2
           echo "$unformatted" >&2
           exit 1
         fi
       - |
-        unformatted="$(goimports -l cmd internal)"
+        unformatted="$(goimports -l cmd internal scripts/opentofu/aws-account-mock)"
         if [ -n "$unformatted" ]; then
           echo "goimports needed on:" >&2
           echo "$unformatted" >&2
@@ -72,7 +72,7 @@ tasks:
     desc: Lint Buf, Go, and JavaScript/TypeScript
     cmds:
       - buf lint
-      - golangci-lint run ./cmd/... ./internal/...
+      - golangci-lint run ./cmd/... ./internal/... ./scripts/opentofu/aws-account-mock/...
       - pnpm lint
 
   gen:fresh:
@@ -149,6 +149,13 @@ tasks:
         ./internal/platform/storage ./internal/platform/crypto ./internal/platform/secret
         -run AWSContract -count=1 -timeout=90s
 
+  test:cell-edge:
+    desc: Prove browser and Connect behavior through a deployed CloudFront cell edge
+    requires:
+      vars: [ACCOUNTABLE_CELL_URL, ACCOUNTABLE_EXPECTED_RELEASE_ID]
+    cmds:
+      - pnpm exec playwright test --config playwright.cell.config.ts
+
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only
     cmds:
@@ -161,24 +168,11 @@ tasks:
       - goose -dir internal/platform/database/migrations validate
 
   tofu:
-    desc: Format-check and validate OpenTofu
-    dir: infra/opentofu
+    desc: Format-check, validate, and test every OpenTofu root and module
     cmds:
-      - tofu fmt -check -recursive
-      - |
-        tofu init -backend=false -input=false
-        tofu validate
-        plugin_dir="$(pwd)/.terraform/providers"
-        validation_data="$(mktemp -d "${TMPDIR:-/tmp}/accountable-tofu-validate.XXXXXX")"
-        cleanup() { rm -rf "$validation_data"; }
-        trap cleanup EXIT
-        for root in bootstrap/development development; do
-          (
-            cd "$root"
-            TF_DATA_DIR="$validation_data/$root" tofu init -backend=false -input=false -plugin-dir="$plugin_dir"
-            TF_DATA_DIR="$validation_data/$root" tofu validate
-          )
-        done
+      - tofu fmt -check -recursive infra/opentofu
+      - bash scripts/opentofu/check.sh
+      - bash scripts/opentofu/prove-cell-negatives.sh
 
   i18n:
     desc: Check localisation catalogs are extracted, valid, and complete

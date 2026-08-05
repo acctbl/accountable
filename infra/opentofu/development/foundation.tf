@@ -41,8 +41,8 @@ resource "aws_s3_bucket" "contract" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "contract" {
-  for_each = aws_s3_bucket.contract
-  bucket   = each.value.id
+  for_each = local.contract_buckets
+  bucket   = aws_s3_bucket.contract[each.key].id
 
   rule {
     object_ownership = "BucketOwnerEnforced"
@@ -52,8 +52,8 @@ resource "aws_s3_bucket_ownership_controls" "contract" {
 # The insecure instance exists only to prove the adapter refuses a bucket when any public-access guard is off.
 #trivy:ignore:AVD-AWS-0086:exp:2026-11-05 trivy:ignore:AVD-AWS-0087:exp:2026-11-05 trivy:ignore:AVD-AWS-0091:exp:2026-11-05 trivy:ignore:AVD-AWS-0093:exp:2026-11-05
 resource "aws_s3_bucket_public_access_block" "contract" {
-  for_each = aws_s3_bucket.contract
-  bucket   = each.value.id
+  for_each = local.contract_buckets
+  bucket   = aws_s3_bucket.contract[each.key].id
 
   block_public_acls       = each.key == "secure"
   block_public_policy     = each.key == "secure"
@@ -62,8 +62,8 @@ resource "aws_s3_bucket_public_access_block" "contract" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "contract" {
-  for_each = aws_s3_bucket.contract
-  bucket   = each.value.id
+  for_each = local.contract_buckets
+  bucket   = aws_s3_bucket.contract[each.key].id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -76,15 +76,15 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "contract" {
 }
 
 data "aws_iam_policy_document" "contract_bucket" {
-  for_each = aws_s3_bucket.contract
+  for_each = local.contract_buckets
 
   statement {
     sid     = "RequireTLS"
     effect  = "Deny"
     actions = ["s3:*"]
     resources = [
-      each.value.arn,
-      "${each.value.arn}/*",
+      aws_s3_bucket.contract[each.key].arn,
+      "${aws_s3_bucket.contract[each.key].arn}/*",
     ]
 
     principals {
@@ -101,8 +101,8 @@ data "aws_iam_policy_document" "contract_bucket" {
 }
 
 resource "aws_s3_bucket_policy" "contract" {
-  for_each = aws_s3_bucket.contract
-  bucket   = each.value.id
+  for_each = local.contract_buckets
+  bucket   = aws_s3_bucket.contract[each.key].id
   policy   = data.aws_iam_policy_document.contract_bucket[each.key].json
 }
 

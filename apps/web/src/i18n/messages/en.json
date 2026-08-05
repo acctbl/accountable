@@ -14,9 +14,6 @@
   "errors.unknown": {
     "defaultMessage": "Something went wrong. Please try again."
   },
-  "home.title": {
-    "defaultMessage": "Accountable"
-  },
   "home.description": {
     "defaultMessage": "Local transport shell"
   },

@@ -14,9 +14,6 @@
   "errors.unknown": {
     "defaultMessage": "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
   },
-  "home.title": {
-    "defaultMessage": "Accountable"
-  },
   "home.description": {
     "defaultMessage": "واجهة النقل المحلية"
   },

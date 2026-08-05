@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import * as React from "react";
 import { FormattedMessage, useIntl } from "react-intl";
+import { PRODUCT_NAME } from "@/brand";
 import { useApi } from "@/lib/api";
 import { formatApiError } from "@/lib/api-error";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -28,9 +29,7 @@ function Home() {
 	return (
 		<main id="main-content" className="flex min-h-svh" tabIndex={-1}>
 			<div className="min-w-0 space-y-2 p-6">
-				<h1 className="sr-only">
-					<FormattedMessage id="home.title" defaultMessage="Accountable" />
-				</h1>
+				<h1 className="sr-only">{PRODUCT_NAME}</h1>
 				<div className="flex items-center">
 					<LocaleSwitcher />
 					<Button size="icon" variant="ghost">

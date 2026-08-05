@@ -1,0 +1,209 @@
+name: Development cell plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      cell:
+        description: Development cell root
+        required: true
+        type: choice
+        options:
+          - development-01
+          - proof-01
+      operation:
+        description: Planned cell state
+        required: true
+        type: choice
+        options:
+          - create
+          - deploy
+          - converge
+          - destroy
+      apply:
+        description: Apply the saved plan after protected approval
+        required: true
+        default: false
+        type: boolean
+      image_uri:
+        description: ECR image URI pinned to a sha256 digest
+        required: true
+        type: string
+      revision:
+        description: Immutable configuration revision
+        required: true
+        type: string
+      infisical_project_id:
+        description: Infisical development project ID
+        required: true
+        type: string
+      api_machine_identity_id:
+        description: Infisical API machine identity ID
+        required: true
+        type: string
+      migrate_machine_identity_id:
+        description: Infisical migration machine identity ID
+        required: true
+        type: string
+      bootstrap_machine_identity_id:
+        description: Infisical bootstrap machine identity ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: development-cell-${{ inputs.cell }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-west-2
+  AWS_DEFAULT_REGION: eu-west-2
+  AWS_ACCOUNT_ID: "453722413624"
+  AWS_PLAN_ROLE_ARN: arn:aws:iam::453722413624:role/accountable-development-plan
+  AWS_APPLY_ROLE_ARN: arn:aws:iam::453722413624:role/accountable-development-apply
+
+jobs:
+  ci:
+    uses: ./.github/workflows/require-green-ci.yml
+    permissions:
+      actions: read
+      contents: read
+
+  plan:
+    if: github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: 2026.7.13
+
+      - name: Request AWS plan identity
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const token = await core.getIDToken("sts.amazonaws.com");
+            const tokenPath = path.join(process.env.RUNNER_TEMP, "aws-plan-token");
+            fs.writeFileSync(tokenPath, token, { mode: 0o600 });
+            core.exportVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenPath);
+            core.exportVariable("AWS_ROLE_ARN", process.env.AWS_PLAN_ROLE_ARN);
+
+      - name: Create and evaluate saved plan
+        env:
+          CELL: ${{ inputs.cell }}
+          OPERATION: ${{ inputs.operation }}
+          IMAGE_URI: ${{ inputs.image_uri }}
+          REVISION: ${{ inputs.revision }}
+          INFISICAL_PROJECT_ID: ${{ inputs.infisical_project_id }}
+          API_MACHINE_IDENTITY_ID: ${{ inputs.api_machine_identity_id }}
+          MIGRATE_MACHINE_IDENTITY_ID: ${{ inputs.migrate_machine_identity_id }}
+          BOOTSTRAP_MACHINE_IDENTITY_ID: ${{ inputs.bootstrap_machine_identity_id }}
+        run: |
+          set -euo pipefail
+          mise trust mise.toml
+          root="infra/opentofu/environments/development/cells/$CELL"
+          desired_count=0
+          if [[ "$OPERATION" == "deploy" || "$OPERATION" == "converge" ]]; then desired_count=1; fi
+          if [[ "$OPERATION" == "converge" && "${{ inputs.apply }}" == "true" ]]; then
+            echo "A convergence proof cannot be applied" >&2
+            exit 2
+          fi
+          destroy_argument=()
+          if [[ "$OPERATION" == "destroy" ]]; then destroy_argument=(-destroy); fi
+          mise exec -- tofu -chdir="$root" init -input=false
+          if [[ "$OPERATION" == "create" && -n "$(mise exec -- tofu -chdir="$root" state list)" ]]; then
+            echo "Create requires an empty cell state" >&2
+            exit 1
+          fi
+          set +e
+          mise exec -- tofu -chdir="$root" plan \
+            -input=false \
+            -detailed-exitcode \
+            -out="$RUNNER_TEMP/cell.plan" \
+            "${destroy_argument[@]}" \
+            -var="api_desired_count=$desired_count" \
+            -var="api_machine_identity_id=$API_MACHINE_IDENTITY_ID" \
+            -var="bootstrap_machine_identity_id=$BOOTSTRAP_MACHINE_IDENTITY_ID" \
+            -var="configuration_revision=$REVISION" \
+            -var="image_uri=$IMAGE_URI" \
+            -var="infisical_project_id=$INFISICAL_PROJECT_ID" \
+            -var="migrate_machine_identity_id=$MIGRATE_MACHINE_IDENTITY_ID"
+          plan_status=$?
+          set -e
+          if [[ "$plan_status" == "1" ]]; then exit 1; fi
+          if [[ "$OPERATION" == "converge" && "$plan_status" != "0" ]]; then
+            echo "Convergence proof found OpenTofu drift" >&2
+            exit 1
+          fi
+          mise exec -- tofu -chdir="$root" show -json "$RUNNER_TEMP/cell.plan" > "$RUNNER_TEMP/cell-plan.json"
+          mise exec -- tofu -chdir="$root" show -no-color "$RUNNER_TEMP/cell.plan" > "$RUNNER_TEMP/cell-plan.txt"
+          mise exec -- go run ./cmd/tofupolicy --account-id "$AWS_ACCOUNT_ID" --plan "$RUNNER_TEMP/cell-plan.json"
+
+      - name: Upload reviewed plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: development-${{ inputs.cell }}-${{ inputs.operation }}-plan
+          path: |
+            ${{ runner.temp }}/cell.plan
+            ${{ runner.temp }}/cell-plan.json
+            ${{ runner.temp }}/cell-plan.txt
+          retention-days: 1
+
+  apply:
+    if: inputs.apply
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: development
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: 2026.7.13
+
+      - name: Download reviewed plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: development-${{ inputs.cell }}-${{ inputs.operation }}-plan
+          path: ${{ runner.temp }}/cell-plan
+
+      - name: Request AWS apply identity
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const token = await core.getIDToken("sts.amazonaws.com");
+            const tokenPath = path.join(process.env.RUNNER_TEMP, "aws-apply-token");
+            fs.writeFileSync(tokenPath, token, { mode: 0o600 });
+            core.exportVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenPath);
+            core.exportVariable("AWS_ROLE_ARN", process.env.AWS_APPLY_ROLE_ARN);
+
+      - name: Apply only the reviewed plan
+        env:
+          CELL: ${{ inputs.cell }}
+        run: |
+          set -euo pipefail
+          mise trust mise.toml
+          root="infra/opentofu/environments/development/cells/$CELL"
+          mise exec -- tofu -chdir="$root" init -input=false
+          mise exec -- go run ./cmd/tofupolicy --account-id "$AWS_ACCOUNT_ID" --plan "$RUNNER_TEMP/cell-plan/cell-plan.json"
+          mise exec -- tofu -chdir="$root" apply -input=false "$RUNNER_TEMP/cell-plan/cell.plan"
+          if [[ "${{ inputs.operation }}" == "destroy" && -n "$(mise exec -- tofu -chdir="$root" state list)" ]]; then
+            echo "Cell state is not empty after destroy" >&2
+            exit 1
+          fi

@@ -7,11 +7,13 @@ terraform {
       version = "~> 6.0"
     }
   }
+
+  backend "s3" {}
 }
 
 provider "aws" {
   region              = var.aws_region
-  allowed_account_ids = [var.aws_account_id]
+  allowed_account_ids = [local.account_id]
 
   default_tags {
     tags = {
@@ -23,6 +25,6 @@ provider "aws" {
 }
 
 locals {
-  account_id        = var.aws_account_id
+  account_id        = "453722413624"
   state_bucket_name = "accountable-tofu-state-${local.account_id}-${var.aws_region}"
 }

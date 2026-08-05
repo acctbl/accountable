@@ -13,7 +13,7 @@ terraform {
 
 provider "aws" {
   region              = var.aws_region
-  allowed_account_ids = [var.aws_account_id]
+  allowed_account_ids = [local.account_id]
 
   default_tags {
     tags = {
@@ -25,7 +25,7 @@ provider "aws" {
 }
 
 locals {
-  account_id           = var.aws_account_id
+  account_id           = "453722413624"
   secure_bucket_name   = "accountable-development-contract-${local.account_id}-${var.aws_region}"
   insecure_bucket_name = "accountable-development-insecure-${local.account_id}-${var.aws_region}"
   github_oidc_subject  = "${var.github_oidc_subject_prefix}:environment:${var.github_environment}"

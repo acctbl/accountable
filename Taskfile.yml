@@ -169,11 +169,14 @@ tasks:
         tofu init -backend=false -input=false
         tofu validate
         plugin_dir="$(pwd)/.terraform/providers"
+        validation_data="$(mktemp -d "${TMPDIR:-/tmp}/accountable-tofu-validate.XXXXXX")"
+        cleanup() { rm -rf "$validation_data"; }
+        trap cleanup EXIT
         for root in bootstrap/development development; do
           (
             cd "$root"
-            tofu init -backend=false -input=false -plugin-dir="$plugin_dir"
-            tofu validate
+            TF_DATA_DIR="$validation_data/$root" tofu init -backend=false -input=false -plugin-dir="$plugin_dir"
+            TF_DATA_DIR="$validation_data/$root" tofu validate
           )
         done
 

@@ -27,6 +27,26 @@ mock_provider "aws" {
   }
 }
 
+mock_provider "aws" {
+  alias = "mock_management"
+
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "906543084690"
+    }
+  }
+}
+
+mock_provider "aws" {
+  alias = "mock_wrong_management"
+
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "000000000000"
+    }
+  }
+}
+
 variables {
   management_account_id      = "906543084690"
   organization_id            = "o-ov472p8q83"
@@ -38,7 +58,8 @@ run "organization_evidence_is_durable_and_validated" {
   command = plan
 
   providers = {
-    aws = aws.mock
+    aws            = aws.mock
+    aws.management = aws.mock_management
   }
 
   assert {
@@ -79,7 +100,8 @@ run "wrong_security_account_is_rejected" {
   command = plan
 
   providers = {
-    aws = aws.mock
+    aws            = aws.mock
+    aws.management = aws.mock_management
   }
 
   variables {
@@ -87,4 +109,15 @@ run "wrong_security_account_is_rejected" {
   }
 
   expect_failures = [aws_kms_key.audit]
+}
+
+run "wrong_management_account_is_rejected" {
+  command = plan
+
+  providers = {
+    aws            = aws.mock
+    aws.management = aws.mock_wrong_management
+  }
+
+  expect_failures = [aws_cloudtrail.organization]
 }

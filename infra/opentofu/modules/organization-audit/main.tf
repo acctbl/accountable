@@ -1,5 +1,9 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_caller_identity" "management" {
+  provider = aws.management
+}
+
 locals {
   bucket_name = "accountable-organization-audit-${var.security_backup_account_id}-${var.region}"
   trail_arn   = "arn:aws:cloudtrail:${var.region}:${var.management_account_id}:trail/accountable-organization"
@@ -216,6 +220,8 @@ resource "aws_s3_bucket_policy" "audit" {
 }
 
 resource "aws_cloudtrail" "organization" {
+  provider = aws.management
+
   name                          = "accountable-organization"
   enable_log_file_validation    = true
   enable_logging                = true
@@ -232,6 +238,11 @@ resource "aws_cloudtrail" "organization" {
 
   lifecycle {
     prevent_destroy = true
+
+    precondition {
+      condition     = data.aws_caller_identity.management.account_id == var.management_account_id
+      error_message = "The organization trail must be managed through the AWS Organizations management account."
+    }
 
     postcondition {
       condition = (

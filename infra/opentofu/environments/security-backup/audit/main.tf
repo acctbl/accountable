@@ -32,8 +32,32 @@ provider "aws" {
   }
 }
 
+provider "aws" {
+  alias               = "management"
+  region              = "eu-west-2"
+  allowed_account_ids = ["906543084690"]
+
+  assume_role {
+    role_arn     = "arn:aws:iam::906543084690:role/accountable-organization-audit-trail"
+    session_name = "accountable-organization-audit"
+  }
+
+  default_tags {
+    tags = {
+      Environment = "security-backup"
+      ManagedBy   = "opentofu"
+      Project     = "accountable"
+    }
+  }
+}
+
 module "audit" {
   source = "../../../modules/organization-audit"
+
+  providers = {
+    aws            = aws
+    aws.management = aws.management
+  }
 
   management_account_id      = "906543084690"
   organization_id            = "o-ov472p8q83"

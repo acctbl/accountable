@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"time"
 
 	"github.com/acctbl/accountable/internal/platform/awsconfig"
@@ -41,25 +42,40 @@ func Build(ctx context.Context, config Config) (*Dependencies, error) {
 		return nil, err
 	}
 
-	resolver, err := secret.NewSource(ctx, config.Secrets, timeSource)
-	if err != nil {
-		return nil, ErrFoundationUnavailable
+	var resolver secret.SecretSource
+	var err error
+	if config.Capabilities.Secrets {
+		resolver, err = secret.NewSource(ctx, config.Secrets, timeSource)
+		if err != nil {
+			return nil, ErrFoundationUnavailable
+		}
 	}
-	db, err := database.OpenDatabase(ctx, config.Database, resolver)
-	if err != nil {
-		return nil, err
+	var db *database.Database
+	if config.Capabilities.Postgres {
+		db, err = database.OpenDatabase(ctx, config.Database, resolver)
+		if err != nil {
+			return nil, err
+		}
 	}
 	fail := func(err error) (*Dependencies, error) {
-		db.Close()
+		if db != nil {
+			db.Close()
+		}
 		return nil, err
 	}
-	store, err := buildStorage(ctx, config)
-	if err != nil {
-		return fail(err)
+	var store storage.Storage
+	if config.Capabilities.ObjectStorage {
+		store, err = buildStorage(ctx, config)
+		if err != nil {
+			return fail(err)
+		}
 	}
-	cryptor, err := buildCrypto(ctx, config, resolver)
-	if err != nil {
-		return fail(err)
+	var cryptor crypto.Crypto
+	if config.Capabilities.KMS {
+		cryptor, err = buildCrypto(ctx, config, resolver)
+		if err != nil {
+			return fail(err)
+		}
 	}
 	flags := features.NewFeatureFlags()
 	dependencies := &Dependencies{
@@ -79,17 +95,23 @@ func (d *Dependencies) Check(ctx context.Context) error {
 	if err := d.timeHealth.Check(ctx); err != nil {
 		return err
 	}
-	if err := d.Database.Check(ctx); err != nil {
-		return err
+	if d.Database != nil {
+		if err := d.Database.Check(ctx); err != nil {
+			return err
+		}
+		if err := d.Database.CheckClock(ctx, d.clock, d.maximumDBSkew); err != nil {
+			return err
+		}
 	}
-	if err := d.Database.CheckClock(ctx, d.clock, d.maximumDBSkew); err != nil {
-		return err
+	if d.Storage != nil {
+		if err := d.Storage.Check(ctx); err != nil {
+			return err
+		}
 	}
-	if err := d.Storage.Check(ctx); err != nil {
-		return err
-	}
-	if err := d.Crypto.Check(ctx); err != nil {
-		return err
+	if d.Crypto != nil {
+		if err := d.Crypto.Check(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -98,10 +120,29 @@ func (d *Dependencies) Ping(ctx context.Context) error {
 	if err := d.timeHealth.Check(ctx); err != nil {
 		return err
 	}
-	return d.Database.Ping(ctx)
+	if d.Database != nil {
+		if err := d.Database.Ping(ctx); err != nil {
+			return err
+		}
+	}
+	if d.Storage != nil {
+		if err := d.Storage.Probe(ctx); err != nil {
+			return err
+		}
+	}
+	if d.Crypto != nil {
+		if err := d.Crypto.Probe(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (d *Dependencies) Close() { d.Database.Close() }
+func (d *Dependencies) Close() {
+	if d.Database != nil {
+		d.Database.Close()
+	}
+}
 
 func Preflight(ctx context.Context, config Config) (PreflightReport, error) {
 	dependencies, err := Build(ctx, config)
@@ -133,7 +174,11 @@ func buildCrypto(ctx context.Context, config Config, secrets secret.SecretSource
 		if !ok {
 			return nil, crypto.ErrCryptoUnavailable
 		}
-		return crypto.NewLocalCrypto(key)
+		keyPath := ""
+		if config.Secrets.Provider == secret.ProviderFile {
+			keyPath = filepath.Join(config.Secrets.Directory, filepath.FromSlash(string(config.Crypto.KeyRef)))
+		}
+		return crypto.NewLocalCrypto(key, keyPath)
 	}
 	awsCfg, err := awsconfig.LoadConfig(ctx, config.Crypto.Region)
 	if err != nil {

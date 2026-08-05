@@ -14,6 +14,9 @@
   "errors.unknown": {
     "defaultMessage": "Something went wrong. Please try again."
   },
+  "home.add.label": {
+    "defaultMessage": "Add"
+  },
   "home.description": {
     "defaultMessage": "Local transport shell"
   },

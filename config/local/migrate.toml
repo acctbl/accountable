@@ -1,20 +1,27 @@
+schema_version = 1
+revision = "development"
 environment = "development"
-listen_address = "127.0.0.1:8080"
-architecture_probe = true
-allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
-trusted_proxy_cidrs = []
-unary_rpc_timeout = "10s"
-stream_rpc_timeout = "25s"
+deployment_mode = "local"
+cell_id = "local"
+aws_region = "eu-west-2"
+runtime_role = "migrate"
 foundation_check_timeout = "30s"
+readiness_probe_interval = "2s"
 
-[features]
-provider = "noop"
+[capabilities]
+architecture_probe = false
+postgres = true
+secrets = true
+kms = true
+object_storage = true
+telemetry = false
+redpanda = false
 
 [secrets]
 provider = "file"
 directory = "../../.local/secrets"
 
-[database]
+[postgres]
 host = "127.0.0.1"
 port = 5432
 name = "accountable"
@@ -28,13 +35,15 @@ health_check_interval = "2s"
 max_connections = 16
 timezone = "UTC"
 
-[storage]
+[object_storage]
 provider = "filesystem"
 root = "../../.local/storage"
+access_purpose = "foundation-proof"
 
-[crypto]
+[kms]
 provider = "local"
 key_ref = "crypto.primary_key"
+encryption_context_prefix = "accountable.foundation"
 
 [time]
 provider = "system"

@@ -2,6 +2,7 @@ package configfile
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -21,14 +22,19 @@ func AbsolutePath(args []string) (string, error) {
 }
 
 func Decode(path string, target any) error {
+	_, err := DecodeWithFingerprint(path, target)
+	return err
+}
+
+func DecodeWithFingerprint(path string, target any) (string, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("open config: %w", err)
+		return "", fmt.Errorf("open config: %w", err)
 	}
 
 	decoder := toml.NewDecoder(bytes.NewReader(contents)).DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return fmt.Errorf("decode config: %w", err)
+		return "", fmt.Errorf("decode config: %w", err)
 	}
-	return nil
+	return fmt.Sprintf("%x", sha256.Sum256(contents)), nil
 }

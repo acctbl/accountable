@@ -100,11 +100,14 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 			if err != nil {
 				t.Errorf("decode signed headers: %v", err)
 			}
-			var headers http.Header
+			var headers map[string]string
 			if err := json.Unmarshal(headerBytes, &headers); err != nil {
 				t.Errorf("unmarshal signed headers: %v", err)
 			}
-			if payload.IdentityID != "identity-api" || headers.Get("Authorization") == "" || headers.Get("Host") == "" {
+			if payload.IdentityID != "identity-api" ||
+				headers["Authorization"] == "" ||
+				headers["Host"] == "" ||
+				headers["X-Amz-Security-Token"] != "test-session-token" {
 				t.Errorf("unsafe login payload: identity=%q headers=%v", payload.IdentityID, headers)
 			}
 			_, _ = response.Write([]byte(`{"accessToken":"short-lived"}`))
@@ -128,7 +131,7 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 	source := NewInfisicalSecretSource(Config{
 		SiteURL: server.URL, AWSRegion: "eu-west-2", ProjectID: "project", Environment: "production",
 		SecretPath: "/accountable/api", MachineIdentityID: "identity-api",
-	}, server.Client(), credentials.NewStaticCredentialsProvider("test-access", "test-secret", ""), clock.Fixed{
+	}, server.Client(), credentials.NewStaticCredentialsProvider("test-access", "test-secret", "test-session-token"), clock.Fixed{
 		Instant: time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC),
 	})
 	values, err := source.ResolveBatch(context.Background(), []Ref{"database/password"})

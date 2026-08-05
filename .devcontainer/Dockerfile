@@ -104,7 +104,13 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 
 RUN if ! getent group "${USER_GID}" >/dev/null; then groupadd --gid "${USER_GID}" devcontainer; fi \
-	&& useradd --uid "${USER_UID}" --gid "${USER_GID}" --create-home --shell /bin/bash devcontainer \
+	&& existing_user="$(getent passwd "${USER_UID}" | cut --delimiter=: --fields=1)" \
+	&& if [ -n "${existing_user}" ]; then \
+		usermod --login devcontainer --home /home/devcontainer --move-home --shell /bin/bash "${existing_user}"; \
+	else \
+		useradd --uid "${USER_UID}" --gid "${USER_GID}" --create-home --shell /bin/bash devcontainer; \
+	fi \
+	&& usermod --gid "${USER_GID}" devcontainer \
 	&& echo 'devcontainer ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/devcontainer \
 	&& chmod 0440 /etc/sudoers.d/devcontainer
 

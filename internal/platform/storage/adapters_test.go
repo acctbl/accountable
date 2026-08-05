@@ -35,3 +35,20 @@ func TestFileStoragePreflightLeavesNoArtifact(t *testing.T) {
 		t.Fatalf("preflight artifacts = %v", entries)
 	}
 }
+
+func TestFileStorageProbeRefusesUnwritableRoot(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store, err := NewFileStorage(root)
+	if err != nil {
+		t.Fatalf("NewFileStorage: %v", err)
+	}
+	if err := os.Chmod(root, 0o500); err != nil {
+		t.Fatalf("make root unwritable: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+	if err := store.Probe(context.Background()); !errors.Is(err, ErrStorageUnavailable) {
+		t.Fatalf("Probe = %v, want storage unavailable", err)
+	}
+}

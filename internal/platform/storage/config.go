@@ -13,4 +13,5 @@ type Config struct {
 	Prefix        string
 	ExpectedOwner string
 	KMSKeyARN     string
+	AccessPurpose string
 }

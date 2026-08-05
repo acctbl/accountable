@@ -21,11 +21,16 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
-	config, err := appconfig.LoadAPI(args)
+	config, err := appconfig.LoadFoundation(args, "")
 	if err != nil {
 		return err
 	}
-	report, err := bootstrap.Preflight(ctx, config.Foundation)
+	fmt.Printf(
+		"configuration: environment=%s deployment_mode=%s cell=%s role=%s revision=%s fingerprint=%s\n",
+		config.Environment, config.DeploymentMode, config.CellID, config.RuntimeRole, config.Revision,
+		config.Fingerprint,
+	)
+	report, err := bootstrap.Preflight(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -33,6 +38,9 @@ func run(ctx context.Context, args []string) error {
 	if !report.BootstrapFlag.Defaulted {
 		flagState = "evaluated"
 	}
-	fmt.Printf("preflight: safe; feature_flag: %s\n", flagState)
+	fmt.Printf(
+		"preflight: safe; revision: %s; fingerprint: %s; feature_flag: %s\n",
+		config.Revision, config.Fingerprint, flagState,
+	)
 	return nil
 }

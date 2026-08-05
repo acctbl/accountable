@@ -99,9 +99,15 @@ func (a *infisicalHTTPAPI) Login(ctx context.Context) (string, error) {
 	); err != nil {
 		return "", err
 	}
-	forwardedHeaders := stsRequest.Header.Clone()
-	forwardedHeaders.Set("Host", stsRequest.Host)
-	forwardedHeaders.Set("Content-Length", strconv.Itoa(len(stsBody)))
+	forwardedHeaders := make(map[string]string, len(stsRequest.Header)+2)
+	for name, values := range stsRequest.Header {
+		if len(values) != 1 {
+			return "", ErrSecretSourceUnavailable
+		}
+		forwardedHeaders[name] = values[0]
+	}
+	forwardedHeaders["Host"] = stsRequest.Host
+	forwardedHeaders["Content-Length"] = strconv.Itoa(len(stsBody))
 	headerBytes, err := json.Marshal(forwardedHeaders)
 	if err != nil {
 		return "", err

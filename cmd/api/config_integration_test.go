@@ -20,6 +20,7 @@ func writeAPIConfig(t *testing.T, contents string) string {
 
 func completeAPIConfig(environment string, architectureProbe bool) string {
 	managed := environment == "staging" || environment == "production"
+	deploymentMode := "local"
 	secrets := `[secrets]
 provider = "file"
 directory = "secrets"`
@@ -49,6 +50,7 @@ provider = "system"
 max_clock_error = "1s"
 max_database_skew = "1s"`
 	if managed {
+		deploymentMode = "managed"
 		secrets = fmt.Sprintf(`[secrets]
 provider = "infisical"
 site_url = "https://eu.infisical.com"
@@ -92,6 +94,7 @@ max_database_skew = "1s"`
 	return fmt.Sprintf(`schema_version = 1
 revision = "reviewed-1"
 environment = %q
+deployment_mode = %q
 cell_id = "cell-a"
 aws_region = "eu-west-2"
 runtime_role = "api"
@@ -123,7 +126,7 @@ stream_rpc_timeout = "25s"
 %s
 
 %s
-`, environment, architectureProbe, secrets, postgres, objectStorage, kms, timeConfig)
+`, environment, deploymentMode, architectureProbe, secrets, postgres, objectStorage, kms, timeConfig)
 }
 
 func TestConfigRequiresExplicitCapabilitiesAndSections(t *testing.T) {
@@ -132,6 +135,7 @@ func TestConfigRequiresExplicitCapabilitiesAndSections(t *testing.T) {
 	path := writeAPIConfig(t, `schema_version = 1
 revision = "reviewed-1"
 environment = "development"
+deployment_mode = "local"
 cell_id = "local"
 aws_region = "eu-west-2"
 runtime_role = "api"`)

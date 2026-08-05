@@ -25,8 +25,9 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	log.Printf(
-		"configuration loaded environment=%s cell=%s role=%s revision=%s fingerprint=%s",
-		config.Foundation.Environment, config.Foundation.CellID, config.Foundation.RuntimeRole,
+		"configuration loaded environment=%s deployment_mode=%s cell=%s role=%s revision=%s fingerprint=%s",
+		config.Foundation.Environment, config.Foundation.DeploymentMode, config.Foundation.CellID,
+		config.Foundation.RuntimeRole,
 		config.Foundation.Revision, config.Foundation.Fingerprint,
 	)
 	return serve(ctx, config)

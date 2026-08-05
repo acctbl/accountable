@@ -1,0 +1,3 @@
+aws_account_id = "123456789012"
+budget_alert_email = "aws-billing@example.com"
+monthly_budget_usd = 10

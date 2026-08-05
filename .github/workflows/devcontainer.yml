@@ -26,19 +26,8 @@ jobs:
 
       - name: Run the same root Task command in the dev container
         run: |
-          parity_network="accountable-devcontainer-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          docker network create "$parity_network"
-          cleanup() { docker network rm "$parity_network" >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          LOCALSTACK_TEST_NETWORK="$parity_network" bash scripts/with-localstack.sh \
-            docker run --rm \
-              --network "$parity_network" \
-              --volume "$GITHUB_WORKSPACE:/workspaces/accountable" \
-              --workdir /workspaces/accountable \
-              --env CI=1 \
-              --env ACCOUNTABLE_TEST_AWS_ENDPOINT \
-              --env ACCOUNTABLE_REQUIRE_LOCALSTACK \
-              --env AWS_ACCESS_KEY_ID \
-              --env AWS_SECRET_ACCESS_KEY \
-              --env AWS_REGION \
-              accountable-devcontainer:ci bash .devcontainer/parity.sh
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspaces/accountable" \
+            --workdir /workspaces/accountable \
+            --env CI=1 \
+            accountable-devcontainer:ci bash .devcontainer/parity.sh

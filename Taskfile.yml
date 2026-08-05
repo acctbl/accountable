@@ -29,12 +29,12 @@ tasks:
   db:migrate:
     desc: Apply compiled migrations through the explicit migrator binary
     cmds:
-      - go run ./cmd/migrate --config "{{.ROOT_DIR}}/config/development/migrate.toml"
+      - go run ./cmd/migrate --config "{{.ROOT_DIR}}/config/local/migrate.toml"
 
   preflight:
     desc: Run the API startup safety checks without opening a listener
     cmds:
-      - go run ./cmd/preflight --config "{{.ROOT_DIR}}/config/development/api.toml"
+      - go run ./cmd/preflight --config "{{.ROOT_DIR}}/config/local/api.toml"
 
   generate:
     desc: Regenerate versioned code
@@ -131,7 +131,6 @@ tasks:
     desc: Run integration tests in every Go package and Playwright
     cmds:
       - task: test:postgres
-      - task: test:aws-contract
       - go test -race ./... -run Integration
       - pnpm exec playwright test tests/integration
 
@@ -142,13 +141,13 @@ tasks:
         bash scripts/with-test-postgres.sh go test -race
         ./internal/migration ./tests/foundation -run PostgresIntegration -count=1
 
-  test:aws-contract:
-    desc: Prove the S3 and KMS adapters against LocalStack
+  test:managed-contract:
+    desc: Prove the S3, KMS, and Infisical adapters against managed development services
     cmds:
       - >-
-        bash scripts/with-localstack.sh bash -c
-        'go test -race -v ./internal/platform/storage -run LocalStackContract -count=1 -timeout=90s &&
-        go test -race -v ./internal/platform/crypto -run LocalStackContract -count=1 -timeout=90s'
+        ACCOUNTABLE_REQUIRE_MANAGED_CONTRACT=1 go test -race -v
+        ./internal/platform/storage ./internal/platform/crypto ./internal/platform/secret
+        -run AWSContract -count=1 -timeout=90s
 
   test:fuzz:
     desc: Run fuzz targets against the committed seed corpus only
@@ -166,8 +165,17 @@ tasks:
     dir: infra/opentofu
     cmds:
       - tofu fmt -check -recursive
-      - tofu init -backend=false -input=false
-      - tofu validate
+      - |
+        tofu init -backend=false -input=false
+        tofu validate
+        plugin_dir="$(pwd)/.terraform/providers"
+        for root in bootstrap/development development; do
+          (
+            cd "$root"
+            tofu init -backend=false -input=false -plugin-dir="$plugin_dir"
+            tofu validate
+          )
+        done
 
   i18n:
     desc: Check localisation catalogs are extracted, valid, and complete
@@ -296,25 +304,14 @@ tasks:
             /workspaces/accountable/packages/proto/node_modules \
             /workspaces/accountable/packages/ui/node_modules
       - |
-        parity_network="accountable-devcontainer-local-$$"
-        docker network create "$parity_network"
-        cleanup() { docker network rm "$parity_network" >/dev/null 2>&1 || true; }
-        trap cleanup EXIT
-        LOCALSTACK_TEST_NETWORK="$parity_network" bash scripts/with-localstack.sh \
-          docker run --rm \
-            --network "$parity_network" \
-            --volume "{{.TASKFILE_DIR}}:/workspaces/accountable" \
-            --volume accountable-devcontainer-home:/home/devcontainer \
-            --volume accountable-devcontainer-node-modules:/workspaces/accountable/node_modules \
-            --volume accountable-devcontainer-admin-node-modules:/workspaces/accountable/apps/admin/node_modules \
-            --volume accountable-devcontainer-web-node-modules:/workspaces/accountable/apps/web/node_modules \
-            --volume accountable-devcontainer-proto-node-modules:/workspaces/accountable/packages/proto/node_modules \
-            --volume accountable-devcontainer-ui-node-modules:/workspaces/accountable/packages/ui/node_modules \
-            --workdir /workspaces/accountable \
-            --env CI=1 \
-            --env ACCOUNTABLE_TEST_AWS_ENDPOINT \
-            --env ACCOUNTABLE_REQUIRE_LOCALSTACK \
-            --env AWS_ACCESS_KEY_ID \
-            --env AWS_SECRET_ACCESS_KEY \
-            --env AWS_REGION \
-            accountable-devcontainer:local bash .devcontainer/parity.sh
+        docker run --rm \
+          --volume "{{.TASKFILE_DIR}}:/workspaces/accountable" \
+          --volume accountable-devcontainer-home:/home/devcontainer \
+          --volume accountable-devcontainer-node-modules:/workspaces/accountable/node_modules \
+          --volume accountable-devcontainer-admin-node-modules:/workspaces/accountable/apps/admin/node_modules \
+          --volume accountable-devcontainer-web-node-modules:/workspaces/accountable/apps/web/node_modules \
+          --volume accountable-devcontainer-proto-node-modules:/workspaces/accountable/packages/proto/node_modules \
+          --volume accountable-devcontainer-ui-node-modules:/workspaces/accountable/packages/ui/node_modules \
+          --workdir /workspaces/accountable \
+          --env CI=1 \
+          accountable-devcontainer:local bash .devcontainer/parity.sh

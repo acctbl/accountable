@@ -30,6 +30,7 @@ write_foundation() {
 schema_version = 1
 revision = "development"
 environment = "development"
+deployment_mode = "local"
 cell_id = "local"
 aws_region = "eu-west-2"
 runtime_role = "$role"

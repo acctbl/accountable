@@ -6,6 +6,12 @@ mock_provider "aws" {
       account_id = "906543084690"
     }
   }
+
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
 }
 
 variables {
@@ -57,6 +63,11 @@ run "cloudtrail_is_delegated_outside_workload_accounts" {
     condition     = aws_organizations_aws_service_access.cloudtrail.service_principal == "cloudtrail.amazonaws.com"
     error_message = "CloudTrail trusted access must be enabled before the delegated administrator is registered."
   }
+
+  assert {
+    condition     = aws_iam_role.audit_trail.name == "accountable-organization-audit-trail"
+    error_message = "The security-backup account must assume a narrow management role to own the organization trail."
+  }
 }
 
 run "wrong_management_account_is_rejected" {
@@ -72,6 +83,7 @@ run "wrong_management_account_is_rejected" {
 
   expect_failures = [
     aws_budgets_budget.account,
+    aws_iam_role.audit_trail,
     aws_organizations_aws_service_access.cloudtrail,
   ]
 }

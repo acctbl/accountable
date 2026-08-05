@@ -1,7 +1,20 @@
 data "aws_caller_identity" "current" {}
 
+resource "aws_organizations_aws_service_access" "cloudtrail" {
+  service_principal = "cloudtrail.amazonaws.com"
+
+  lifecycle {
+    precondition {
+      condition     = data.aws_caller_identity.current.account_id == var.management_account_id
+      error_message = "CloudTrail trusted access must be managed from the AWS Organizations management account."
+    }
+  }
+}
+
 resource "aws_cloudtrail_organization_delegated_admin_account" "security_backup" {
   account_id = var.security_backup_account_id
+
+  depends_on = [aws_organizations_aws_service_access.cloudtrail]
 
   lifecycle {
     precondition {

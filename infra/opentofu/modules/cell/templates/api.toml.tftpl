@@ -1,0 +1,70 @@
+schema_version = 1
+revision = "${revision}"
+environment = "${environment}"
+deployment_mode = "managed"
+cell_id = "${cell_id}"
+aws_region = "${aws_region}"
+runtime_role = "api"
+foundation_check_timeout = "30s"
+readiness_probe_interval = "10s"
+
+[capabilities]
+architecture_probe = true
+postgres = true
+secrets = true
+kms = true
+object_storage = true
+telemetry = false
+redpanda = false
+
+[server]
+listen_address = "0.0.0.0:8080"
+allowed_origins = ["https://${cloudfront_domain}"]
+trusted_proxy_cidrs = [${trusted_proxy_cidrs}]
+unary_rpc_timeout = "10s"
+stream_rpc_timeout = "25s"
+
+[secrets]
+provider = "infisical"
+site_url = "https://eu.infisical.com"
+aws_region = "${aws_region}"
+project_id = "${infisical_project_id}"
+environment = "${environment}"
+secret_path = "${secret_path}"
+auth_method = "aws_iam"
+machine_identity_id = "${machine_identity_id}"
+
+[postgres]
+host = "${database_host}"
+port = 5432
+name = "accountable"
+user = "accountable_api"
+role = "accountable_api"
+password_ref = "database/password"
+tls_mode = "verify-full"
+tls_root_ca_file = "/etc/ssl/certs/aws-rds-global-bundle.pem"
+connect_timeout = "5s"
+statement_timeout = "10s"
+health_check_interval = "10s"
+max_connections = 16
+timezone = "UTC"
+
+[object_storage]
+provider = "s3"
+region = "${aws_region}"
+bucket = "${data_bucket}"
+prefix = "foundation"
+expected_owner = "${account_id}"
+kms_key_arn = "${kms_key_arn}"
+access_purpose = "foundation-proof"
+
+[kms]
+provider = "aws_kms"
+region = "${aws_region}"
+kms_key_arn = "${kms_key_arn}"
+encryption_context_prefix = "accountable.${cell_id}"
+
+[time]
+provider = "linux"
+max_clock_error = "1s"
+max_database_skew = "1s"

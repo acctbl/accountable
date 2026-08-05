@@ -1,0 +1,54 @@
+name: Require green CI
+
+on:
+  workflow_call:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Require successful CI for this commit
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.sha;
+            const deadline = Date.now() + 70 * 60 * 1000;
+
+            while (Date.now() < deadline) {
+              const branch = await github.rest.repos.getBranch({ owner, repo, branch: "main" });
+              if (branch.data.commit.sha !== sha) {
+                core.setFailed(`Refusing to deploy ${sha}: main is now ${branch.data.commit.sha}`);
+                return;
+              }
+
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: "ci.yml",
+                head_sha: sha,
+                event: "push",
+                per_page: 10,
+              });
+              const run = response.data.workflow_runs.find(candidate => candidate.head_sha === sha);
+
+              if (run?.status === "completed") {
+                if (run.conclusion !== "success") {
+                  core.setFailed(`CI for ${sha} concluded ${run.conclusion}: ${run.html_url}`);
+                  return;
+                }
+                core.info(`CI passed for ${sha}: ${run.html_url}`);
+                return;
+              }
+
+              core.info(run ? `CI is ${run.status} for ${sha}` : `Waiting for CI to start for ${sha}`);
+              await new Promise(resolve => setTimeout(resolve, 30000));
+            }
+
+            core.setFailed(`CI did not pass for ${sha} within 70 minutes`);

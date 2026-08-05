@@ -24,3 +24,19 @@ func NewSource(ctx context.Context, config Config, timeSource clock.Clock) (Secr
 		timeSource,
 	), nil
 }
+
+func NewStore(ctx context.Context, config Config, timeSource clock.Clock) (*InfisicalSecretStore, error) {
+	if config.Provider != ProviderInfisical {
+		return nil, ErrSecretSourceUnavailable
+	}
+	awsCfg, err := awsconfig.LoadConfig(ctx, config.AWSRegion)
+	if err != nil {
+		return nil, err
+	}
+	return NewInfisicalSecretStore(
+		config,
+		&http.Client{Timeout: 10 * time.Second},
+		awsCfg.Credentials,
+		timeSource,
+	), nil
+}

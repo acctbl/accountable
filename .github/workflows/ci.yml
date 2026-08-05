@@ -49,3 +49,11 @@ jobs:
         run: |
           mise trust mise.toml
           mise exec -- task ci
+
+  managed-contract:
+    needs: verify
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/managed-contract.yml

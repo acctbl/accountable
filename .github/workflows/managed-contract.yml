@@ -1,20 +1,7 @@
 name: Managed adapter contract
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/managed-contract.yml"
-      - "Taskfile.yml"
-      - "go.mod"
-      - "go.sum"
-      - "internal/platform/awsconfig/**"
-      - "internal/platform/crypto/**"
-      - "internal/platform/secret/**"
-      - "internal/platform/storage/**"
-      - "infra/opentofu/bootstrap/development/**"
-      - "infra/opentofu/development/**"
-  push:
-    branches: [develop, main]
+  workflow_call:
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
@@ -29,9 +16,10 @@ concurrency:
 
 jobs:
   verify:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    environment: development
+    environment:
+      name: development
+      deployment: false
     env:
       AWS_ROLE_ARN: ${{ vars.AWS_CONTRACT_ROLE_ARN }}
       AWS_REGION: ${{ vars.AWS_REGION }}

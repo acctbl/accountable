@@ -52,6 +52,11 @@ run "cloudtrail_is_delegated_outside_workload_accounts" {
     condition     = aws_cloudtrail_organization_delegated_admin_account.security_backup.account_id == "063280428550"
     error_message = "The security-backup account must be the organization CloudTrail delegated administrator."
   }
+
+  assert {
+    condition     = aws_organizations_aws_service_access.cloudtrail.service_principal == "cloudtrail.amazonaws.com"
+    error_message = "CloudTrail trusted access must be enabled before the delegated administrator is registered."
+  }
 }
 
 run "wrong_management_account_is_rejected" {
@@ -67,6 +72,6 @@ run "wrong_management_account_is_rejected" {
 
   expect_failures = [
     aws_budgets_budget.account,
-    aws_cloudtrail_organization_delegated_admin_account.security_backup,
+    aws_organizations_aws_service_access.cloudtrail,
   ]
 }

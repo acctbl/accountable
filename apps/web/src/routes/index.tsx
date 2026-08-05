@@ -32,8 +32,15 @@ function Home() {
 				<h1 className="sr-only">{PRODUCT_NAME}</h1>
 				<div className="flex items-center">
 					<LocaleSwitcher />
-					<Button size="icon" variant="ghost">
-						<PlusIcon />
+					<Button
+						size="icon"
+						variant="ghost"
+						aria-label={intl.formatMessage({
+							id: "home.add.label",
+							defaultMessage: "Add",
+						})}
+					>
+						<PlusIcon aria-hidden />
 					</Button>
 				</div>
 				<p>

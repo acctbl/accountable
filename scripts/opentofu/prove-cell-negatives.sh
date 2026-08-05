@@ -73,7 +73,10 @@ sed "s|OFFLINE_AWS_ENDPOINT|$offline_endpoint|g" "$fixture_root/offline-root.tf"
 # itself manufacture a policy violation.
 strip_lifecycle_guards() {
 	local file
-	while IFS= read -r file; do
+	while IFS= read -r -d '' file; do
+		if ! grep -F -q -- '  lifecycle {' "$file"; then
+			continue
+		fi
 		awk '
 			!skipping && /^  lifecycle \{$/ { skipping = 1; depth = 1; next }
 			skipping {
@@ -87,7 +90,7 @@ strip_lifecycle_guards() {
 			{ print }
 		' "$file" >"$file.without-lifecycle"
 		mv "$file.without-lifecycle" "$file"
-	done < <(rg -l '^  lifecycle \{' "$module_root")
+	done < <(find "$module_root" -type f -name '*.tf' -print0)
 }
 
 strip_lifecycle_guards
@@ -186,7 +189,7 @@ prove() {
 		echo "saved-plan policy unexpectedly accepted negative cell plan: $name" >&2
 		return 1
 	fi
-	if ! rg -F "$expected" "$policy_log" >/dev/null; then
+	if ! grep -F -q -- "$expected" "$policy_log"; then
 		cat "$policy_log" >&2
 		echo "saved-plan policy rejected the wrong condition: $name" >&2
 		return 1

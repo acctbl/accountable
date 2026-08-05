@@ -162,6 +162,29 @@ data "aws_iam_policy_document" "bucket" {
   }
 
   statement {
+    sid       = "AllowManagementTrailDelivery"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.audit.arn}/AWSLogs/${var.management_account_id}/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudtrail.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = [local.trail_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-acl"
+      values   = ["bucket-owner-full-control"]
+    }
+  }
+
+  statement {
     sid       = "AllowOrganizationTrailDelivery"
     actions   = ["s3:PutObject"]
     resources = ["${aws_s3_bucket.audit.arn}/AWSLogs/${var.organization_id}/*"]

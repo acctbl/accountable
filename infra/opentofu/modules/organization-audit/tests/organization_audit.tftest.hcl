@@ -18,6 +18,13 @@ mock_provider "aws" {
       arn = "arn:aws:kms:eu-west-2:063280428550:key/00000000-0000-0000-0000-000000000000"
     }
   }
+
+  mock_resource "aws_s3_bucket" {
+    defaults = {
+      arn = "arn:aws:s3:::accountable-organization-audit-063280428550-eu-west-2"
+      id  = "accountable-organization-audit-063280428550-eu-west-2"
+    }
+  }
 }
 
 variables {
@@ -55,6 +62,16 @@ run "organization_evidence_is_durable_and_validated" {
       aws_kms_key.audit.enable_key_rotation
     )
     error_message = "Organization evidence storage must be private, versioned, and protected by a rotating KMS key."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in data.aws_iam_policy_document.bucket.statement :
+      statement.sid == "AllowManagementTrailDelivery" &&
+      contains(statement.actions, "s3:PutObject") &&
+      contains(statement.resources, "arn:aws:s3:::accountable-organization-audit-063280428550-eu-west-2/AWSLogs/906543084690/*")
+    ])
+    error_message = "The audit bucket must allow CloudTrail to validate delivery for the management-account log path."
   }
 }
 

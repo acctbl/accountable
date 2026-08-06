@@ -57,6 +57,12 @@ jobs:
             fs.writeFileSync(tokenPath, token, { mode: 0o600 });
             core.exportVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenPath);
 
+      - name: Create Buildx builder for attestations
+        run: |
+          set -euo pipefail
+          docker buildx create --name accountable --driver docker-container --use
+          docker buildx inspect --bootstrap
+
       - name: Build and push immutable ARM64 image
         run: |
           set -euo pipefail

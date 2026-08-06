@@ -1,0 +1,38 @@
+name: Mirror to Codeberg
+
+on:
+  schedule:
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeberg-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Configure SSH
+        env:
+          CODEBERG_SSH_KEY: ${{ secrets.CODEBERG_SSH_KEY }}
+        run: |
+          if [ -z "${CODEBERG_SSH_KEY}" ]; then
+            echo "Missing secret CODEBERG_SSH_KEY" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "${CODEBERG_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 codeberg.org >> ~/.ssh/known_hosts
+
+      - name: Mirror repository
+        run: |
+          git clone --mirror "https://github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git for-each-ref --format='delete %(refname)' refs/pull/ | git update-ref --stdin
+          git push --mirror "ssh://git@codeberg.org/acctbl/accountable.git"

@@ -127,7 +127,7 @@ func managedFileConfig() FileConfig {
 		Capabilities: completeCapabilities(false),
 		Secrets: &SecretsFileConfig{
 			Provider: secret.ProviderInfisical, SiteURL: "https://eu.infisical.com", AWSRegion: "eu-west-2",
-			ProjectID: "project-production", Environment: "production", SecretPath: "/accountable/api",
+			ProjectID: "project-production", Environment: "production", SecretPath: "/api",
 			AuthMethod: secret.AuthAWSIAM, MachineIdentityID: "identity-production",
 		},
 		Postgres: &DatabaseFileConfig{

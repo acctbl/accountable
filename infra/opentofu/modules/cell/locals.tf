@@ -17,5 +17,5 @@ locals {
   database_port = 5432
   data_bucket   = "${local.name}-${var.account_id}-data"
   web_bucket    = "${local.name}-${var.account_id}-web"
-  secret_root   = "/accountable/${var.cell_id}"
+  secret_root   = "/${var.cell_id}"
 }

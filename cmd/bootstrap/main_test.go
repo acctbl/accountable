@@ -15,15 +15,15 @@ database_host = "database.example.com"
 environment = "development"
 infisical_machine_identity_id = "identity-bootstrap"
 infisical_project_id = "project-development"
-infisical_secret_root = "/accountable/development-01"
+infisical_secret_root = "/development-01"
 `)
 	config, err := loadConfig([]string{"--config", path})
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
 	if config.region != "eu-west-2" || config.databaseHost != "database.example.com" ||
-		config.apiSecrets.SecretPath != "/accountable/development-01/api" ||
-		config.migrateSecrets.SecretPath != "/accountable/development-01/migrate" {
+		config.apiSecrets.SecretPath != "/development-01/api" ||
+		config.migrateSecrets.SecretPath != "/development-01/migrate" {
 		t.Fatalf("config = %#v", config)
 	}
 }
@@ -34,7 +34,7 @@ func TestLoadConfigRejectsMissingOrUnsafeManagedBootstrapEnvironment(t *testing.
 	base := fileConfig{
 		AWSRegion: "eu-west-2", DatabaseHost: "database.example.com", Environment: "development",
 		MachineIdentityID: "identity-bootstrap", ProjectID: "project-development",
-		SecretRoot: "/accountable/development-01",
+		SecretRoot: "/development-01",
 	}
 	for name, mutate := range map[string]func(*fileConfig){
 		"local environment":      func(value *fileConfig) { value.Environment = "local" },

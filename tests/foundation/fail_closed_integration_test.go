@@ -309,7 +309,7 @@ site_url = "https://eu.infisical.com"
 aws_region = "eu-west-2"
 project_id = "accountable"
 environment = "production"
-secret_path = "/accountable/api"
+secret_path = "/api"
 auth_method = "aws_iam"
 machine_identity_id = "identity-api"
 

@@ -152,10 +152,16 @@ for address in "${contract_addresses[@]}"; do
 	move_state "$legacy_development_state" "$contracts_state" "$address" "module.managed_contract.$address"
 done
 
-move_state \
-	"$legacy_development_state" "$foundation_state" \
-	aws_budgets_budget.development \
-	module.environment.module.account.aws_budgets_budget.account
+# Budgets are owned by the organization foundation root. The legacy development
+# state may not contain aws_budgets_budget.development at all.
+if tofu state list -state="$legacy_development_state" | grep -qx 'aws_budgets_budget.development'; then
+	move_state \
+		"$legacy_development_state" "$foundation_state" \
+		aws_budgets_budget.development \
+		module.environment.module.account.aws_budgets_budget.account
+else
+	echo "note: aws_budgets_budget.development absent from legacy state; skipping" >&2
+fi
 move_state \
 	"$legacy_development_state" "$foundation_state" \
 	aws_iam_openid_connect_provider.github \

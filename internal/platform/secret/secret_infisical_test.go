@@ -165,7 +165,7 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 			if request.Header.Get("Authorization") != "Bearer short-lived" ||
 				request.URL.Query().Get("projectId") != "project" ||
 				request.URL.Query().Get("environment") != "production" ||
-				request.URL.Query().Get("secretPath") != "/accountable/api" ||
+				request.URL.Query().Get("secretPath") != "/api" ||
 				request.URL.Query().Get("viewSecretValue") != "true" ||
 				request.URL.Query().Get("expandSecretReferences") != "false" ||
 				request.URL.Query().Get("includeImports") != "false" {
@@ -180,7 +180,7 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 
 	source := NewInfisicalSecretSource(Config{
 		SiteURL: server.URL, AWSRegion: "eu-west-2", ProjectID: "project", Environment: "production",
-		SecretPath: "/accountable/api", MachineIdentityID: "identity-api",
+		SecretPath: "/api", MachineIdentityID: "identity-api",
 	}, server.Client(), credentials.NewStaticCredentialsProvider("test-access", "test-secret", "test-session-token"), clock.Fixed{
 		Instant: time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC),
 	})
@@ -212,7 +212,7 @@ func TestInfisicalHTTPStoreCreatesAnExactlyScopedSecret(t *testing.T) {
 			}
 			if request.Header.Get("Authorization") != "Bearer short-lived" || json.NewDecoder(request.Body).Decode(&payload) != nil ||
 				payload.Environment != "development" || payload.ProjectID != "project" ||
-				payload.SecretPath != "/accountable/development-01/api" || payload.SecretValue != "generated" ||
+				payload.SecretPath != "/development-01/api" || payload.SecretValue != "generated" ||
 				payload.Type != "shared" {
 				t.Errorf("unsafe create request: %#v", payload)
 			}
@@ -225,7 +225,7 @@ func TestInfisicalHTTPStoreCreatesAnExactlyScopedSecret(t *testing.T) {
 
 	store := NewInfisicalSecretStore(Config{
 		SiteURL: server.URL, AWSRegion: "eu-west-2", ProjectID: "project", Environment: "development",
-		SecretPath: "/accountable/development-01/api", MachineIdentityID: "identity-bootstrap",
+		SecretPath: "/development-01/api", MachineIdentityID: "identity-bootstrap",
 	}, server.Client(), credentials.NewStaticCredentialsProvider("test-access", "test-secret", "test-session-token"), clock.Fixed{
 		Instant: time.Date(2026, time.August, 5, 0, 0, 0, 0, time.UTC),
 	})

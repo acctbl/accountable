@@ -30,7 +30,7 @@ const (
 	masterRole                       = "accountable_admin"
 	migrateRole                      = "accountable_migrate"
 	masterPasswordRef     secret.Ref = "database-master-password"
-	passwordRef           secret.Ref = "database/password"
+	passwordRef           secret.Ref = "database-password"
 )
 
 var awsRegionPattern = regexp.MustCompile(`^[a-z]{2}(?:-gov)?-[a-z]+-\d$`)

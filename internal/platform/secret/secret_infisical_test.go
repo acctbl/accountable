@@ -62,15 +62,15 @@ func TestInfisicalSecretSourceResolvesCompleteBatch(t *testing.T) {
 	source := newInfisicalSecretSource(fakeInfisicalAPI{
 		token: "short-lived-token",
 		values: map[Ref][]byte{
-			"database/password": []byte("database-secret"),
+			"database-password": []byte("database-secret"),
 			"crypto/key":        []byte("crypto-secret"),
 		},
 	})
-	values, err := source.ResolveBatch(context.Background(), []Ref{"database/password", "crypto/key"})
+	values, err := source.ResolveBatch(context.Background(), []Ref{"database-password", "crypto/key"})
 	if err != nil {
 		t.Fatalf("ResolveBatch: %v", err)
 	}
-	if got := string(values["database/password"].Bytes()); got != "database-secret" {
+	if got := string(values["database-password"].Bytes()); got != "database-secret" {
 		t.Fatalf("database secret = %q", got)
 	}
 }
@@ -80,9 +80,9 @@ func TestInfisicalSecretSourceReturnsNoPartialBatch(t *testing.T) {
 
 	source := newInfisicalSecretSource(fakeInfisicalAPI{
 		token:  "short-lived-token",
-		values: map[Ref][]byte{"database/password": []byte("database-secret")},
+		values: map[Ref][]byte{"database-password": []byte("database-secret")},
 	})
-	values, err := source.ResolveBatch(context.Background(), []Ref{"database/password", "missing"})
+	values, err := source.ResolveBatch(context.Background(), []Ref{"database-password", "missing"})
 	if !errors.Is(err, ErrSecretSourceUnavailable) || values != nil {
 		t.Fatalf("ResolveBatch = %#v, %v; want nil, unavailable", values, err)
 	}
@@ -161,7 +161,7 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 				t.Errorf("unsafe login payload: identity=%q headers=%v", payload.IdentityID, headers)
 			}
 			_, _ = response.Write([]byte(`{"accessToken":"short-lived"}`))
-		case "/api/v4/secrets/database/password":
+		case "/api/v4/secrets/database-password":
 			if request.Header.Get("Authorization") != "Bearer short-lived" ||
 				request.URL.Query().Get("projectId") != "project" ||
 				request.URL.Query().Get("environment") != "production" ||
@@ -171,7 +171,7 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 				request.URL.Query().Get("includeImports") != "false" {
 				t.Errorf("unsafe secret request: %s", request.URL.String())
 			}
-			_, _ = response.Write([]byte(`{"secret":{"secretKey":"database/password","secretValue":"resolved"}}`))
+			_, _ = response.Write([]byte(`{"secret":{"secretKey":"database-password","secretValue":"resolved"}}`))
 		default:
 			http.NotFound(response, request)
 		}
@@ -184,11 +184,11 @@ func TestInfisicalHTTPSourceUsesSignedAWSIdentityAndExactSecretLookup(t *testing
 	}, server.Client(), credentials.NewStaticCredentialsProvider("test-access", "test-secret", "test-session-token"), clock.Fixed{
 		Instant: time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC),
 	})
-	values, err := source.ResolveBatch(context.Background(), []Ref{"database/password"})
+	values, err := source.ResolveBatch(context.Background(), []Ref{"database-password"})
 	if err != nil {
 		t.Fatalf("ResolveBatch: %v", err)
 	}
-	if got := string(values["database/password"].Bytes()); got != "resolved" {
+	if got := string(values["database-password"].Bytes()); got != "resolved" {
 		t.Fatalf("secret = %q", got)
 	}
 }
@@ -200,9 +200,9 @@ func TestInfisicalHTTPStoreCreatesAnExactlyScopedSecret(t *testing.T) {
 		switch {
 		case request.URL.Path == "/api/v1/auth/aws-auth/login":
 			_, _ = response.Write([]byte(`{"accessToken":"short-lived"}`))
-		case request.URL.Path == "/api/v4/secrets/database/password" && request.Method == http.MethodGet:
+		case request.URL.Path == "/api/v4/secrets/database-password" && request.Method == http.MethodGet:
 			http.NotFound(response, request)
-		case request.URL.Path == "/api/v4/secrets/database/password" && request.Method == http.MethodPost:
+		case request.URL.Path == "/api/v4/secrets/database-password" && request.Method == http.MethodPost:
 			var payload struct {
 				Environment string `json:"environment"`
 				ProjectID   string `json:"projectId"`
@@ -216,7 +216,7 @@ func TestInfisicalHTTPStoreCreatesAnExactlyScopedSecret(t *testing.T) {
 				payload.Type != "shared" {
 				t.Errorf("unsafe create request: %#v", payload)
 			}
-			_, _ = response.Write([]byte(`{"secret":{"secretKey":"database/password"}}`))
+			_, _ = response.Write([]byte(`{"secret":{"secretKey":"database-password"}}`))
 		default:
 			http.NotFound(response, request)
 		}
@@ -229,13 +229,13 @@ func TestInfisicalHTTPStoreCreatesAnExactlyScopedSecret(t *testing.T) {
 	}, server.Client(), credentials.NewStaticCredentialsProvider("test-access", "test-secret", "test-session-token"), clock.Fixed{
 		Instant: time.Date(2026, time.August, 5, 0, 0, 0, 0, time.UTC),
 	})
-	values, err := store.ResolveOrCreateBatch(context.Background(), []Ref{"database/password"}, func(Ref) ([]byte, error) {
+	values, err := store.ResolveOrCreateBatch(context.Background(), []Ref{"database-password"}, func(Ref) ([]byte, error) {
 		return []byte("generated"), nil
 	})
 	if err != nil {
 		t.Fatalf("ResolveOrCreateBatch: %v", err)
 	}
-	if got := string(values["database/password"].Bytes()); got != "generated" {
+	if got := string(values["database-password"].Bytes()); got != "generated" {
 		t.Fatalf("created value = %q", got)
 	}
 }

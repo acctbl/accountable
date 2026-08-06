@@ -27,7 +27,7 @@ func TestParseAcceptsExplicitManagedFoundation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if config.Database.PasswordRef != "database/password" || config.Database.TLSMode != database.TLSVerifyFull ||
+	if config.Database.PasswordRef != "database-password" || config.Database.TLSMode != database.TLSVerifyFull ||
 		config.Secrets.Provider != secret.ProviderInfisical || config.Storage.Provider != storage.ProviderS3 ||
 		config.Crypto.Provider != crypto.ProviderAWSKMS || config.Time.Provider != TimeProviderLinux ||
 		config.DeploymentMode != DeploymentModeManaged || config.Fingerprint != "fingerprint" ||
@@ -132,7 +132,7 @@ func managedFileConfig() FileConfig {
 		},
 		Postgres: &DatabaseFileConfig{
 			Host: "postgres.internal", Port: 5432, Name: "accountable", User: "accountable_login", Role: "accountable_api",
-			PasswordRef: "database/password", TLSMode: database.TLSVerifyFull, ConnectTimeout: "5s",
+			PasswordRef: "database-password", TLSMode: database.TLSVerifyFull, ConnectTimeout: "5s",
 			StatementTimeout: "10s", HealthCheckInterval: "30s", MaxConnections: 16, Timezone: "UTC",
 		},
 		ObjectStorage: &StorageFileConfig{

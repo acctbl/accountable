@@ -35,8 +35,8 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 		"$POSTGRES_TEST_IMAGE" >/dev/null
 	POSTGRES_PORT="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$POSTGRES_CONTAINER")"
 	POSTGRES_READY="false"
-	for _ in $(seq 1 100); do
-		if docker exec "$POSTGRES_CONTAINER" pg_isready --username postgres --dbname "$TEST_POSTGRES_DATABASE" >/dev/null 2>&1; then
+	for _ in $(seq 1 300); do
+		if docker exec "$POSTGRES_CONTAINER" pg_isready --host 127.0.0.1 --username postgres --dbname "$TEST_POSTGRES_DATABASE" >/dev/null 2>&1; then
 			POSTGRES_READY="true"
 			break
 		fi

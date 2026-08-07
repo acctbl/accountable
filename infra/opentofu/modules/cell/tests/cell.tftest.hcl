@@ -212,6 +212,43 @@ run "tasks_use_the_image_digest" {
   }
 }
 
+run "tasks_use_tmpfs_runtime_scratch" {
+  command = plan
+
+  providers = {
+    aws        = aws.regional
+    aws.global = aws.global
+  }
+
+  assert {
+    condition = alltrue([
+      for definitions in [
+        aws_ecs_task_definition.api.container_definitions,
+        aws_ecs_task_definition.migrate.container_definitions,
+        aws_ecs_task_definition.preflight.container_definitions,
+        aws_ecs_task_definition.bootstrap.container_definitions,
+      ] :
+      strcontains(definitions, "\"tmpfs\"") &&
+      strcontains(definitions, "/run/accountable") &&
+      strcontains(definitions, "mode=1777") &&
+      strcontains(definitions, "\"readonlyRootFilesystem\":true") &&
+      !strcontains(definitions, "mountPoints") &&
+      !strcontains(definitions, "sourceVolume")
+    ])
+    error_message = "Runtime tasks must use a mode=1777 tmpfs at /run/accountable instead of root-owned bind mounts."
+  }
+
+  assert {
+    condition = alltrue([
+      length(aws_ecs_task_definition.api.volume) == 0,
+      length(aws_ecs_task_definition.migrate.volume) == 0,
+      length(aws_ecs_task_definition.preflight.volume) == 0,
+      length(aws_ecs_task_definition.bootstrap.volume) == 0,
+    ])
+    error_message = "Runtime tasks must not declare empty bind-mount volumes."
+  }
+}
+
 run "only_bootstrap_uses_the_secret_execution_role" {
   command = plan
 

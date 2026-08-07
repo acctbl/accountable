@@ -76,10 +76,20 @@ locals {
       awslogs-stream-prefix = "runtime"
     }
   }
+
+  runtime_scratch = {
+    linuxParameters = {
+      tmpfs = [{
+        containerPath = "/run/accountable"
+        mountOptions  = ["rw", "noexec", "nosuid", "nodev", "mode=1777"]
+        size          = 64
+      }]
+    }
+  }
 }
 
 resource "aws_ecs_task_definition" "api" {
-  container_definitions = jsonencode([{
+  container_definitions = jsonencode([merge(local.runtime_scratch, {
     command   = ["api"]
     essential = true
     environment = [{
@@ -88,12 +98,7 @@ resource "aws_ecs_task_definition" "api" {
     }]
     image            = var.image_uri
     logConfiguration = local.log_configuration
-    mountPoints = [{
-      containerPath = "/run/accountable"
-      readOnly      = false
-      sourceVolume  = "runtime"
-    }]
-    name = "api"
+    name             = "api"
     portMappings = [{
       appProtocol   = "http"
       containerPort = local.api_port
@@ -102,7 +107,7 @@ resource "aws_ecs_task_definition" "api" {
       protocol      = "tcp"
     }]
     readonlyRootFilesystem = true
-  }])
+  })])
   cpu                      = 256
   execution_role_arn       = aws_iam_role.execution.arn
   family                   = "${local.name}-api"
@@ -111,10 +116,6 @@ resource "aws_ecs_task_definition" "api" {
   requires_compatibilities = ["FARGATE"]
   task_role_arn            = aws_iam_role.api.arn
 
-  volume {
-    name = "runtime"
-  }
-
   runtime_platform {
     cpu_architecture        = "ARM64"
     operating_system_family = "LINUX"
@@ -122,23 +123,18 @@ resource "aws_ecs_task_definition" "api" {
 }
 
 resource "aws_ecs_task_definition" "migrate" {
-  container_definitions = jsonencode([{
+  container_definitions = jsonencode([merge(local.runtime_scratch, {
     command   = ["migrate"]
     essential = true
     environment = [{
       name  = "ACCOUNTABLE_CONFIG_BASE64"
       value = base64encode(local.migrate_config)
     }]
-    image            = var.image_uri
-    logConfiguration = local.log_configuration
-    mountPoints = [{
-      containerPath = "/run/accountable"
-      readOnly      = false
-      sourceVolume  = "runtime"
-    }]
+    image                  = var.image_uri
+    logConfiguration       = local.log_configuration
     name                   = "migrate"
     readonlyRootFilesystem = true
-  }])
+  })])
   cpu                      = 256
   execution_role_arn       = aws_iam_role.execution.arn
   family                   = "${local.name}-migrate"
@@ -147,10 +143,6 @@ resource "aws_ecs_task_definition" "migrate" {
   requires_compatibilities = ["FARGATE"]
   task_role_arn            = aws_iam_role.migrate.arn
 
-  volume {
-    name = "runtime"
-  }
-
   runtime_platform {
     cpu_architecture        = "ARM64"
     operating_system_family = "LINUX"
@@ -158,23 +150,18 @@ resource "aws_ecs_task_definition" "migrate" {
 }
 
 resource "aws_ecs_task_definition" "preflight" {
-  container_definitions = jsonencode([{
+  container_definitions = jsonencode([merge(local.runtime_scratch, {
     command   = ["preflight"]
     essential = true
     environment = [{
       name  = "ACCOUNTABLE_CONFIG_BASE64"
       value = base64encode(local.preflight_config)
     }]
-    image            = var.image_uri
-    logConfiguration = local.log_configuration
-    mountPoints = [{
-      containerPath = "/run/accountable"
-      readOnly      = false
-      sourceVolume  = "runtime"
-    }]
+    image                  = var.image_uri
+    logConfiguration       = local.log_configuration
     name                   = "preflight"
     readonlyRootFilesystem = true
-  }])
+  })])
   cpu                      = 256
   execution_role_arn       = aws_iam_role.execution.arn
   family                   = "${local.name}-preflight"
@@ -183,10 +170,6 @@ resource "aws_ecs_task_definition" "preflight" {
   requires_compatibilities = ["FARGATE"]
   task_role_arn            = aws_iam_role.api.arn
 
-  volume {
-    name = "runtime"
-  }
-
   runtime_platform {
     cpu_architecture        = "ARM64"
     operating_system_family = "LINUX"
@@ -194,7 +177,7 @@ resource "aws_ecs_task_definition" "preflight" {
 }
 
 resource "aws_ecs_task_definition" "bootstrap" {
-  container_definitions = jsonencode([{
+  container_definitions = jsonencode([merge(local.runtime_scratch, {
     command   = ["bootstrap"]
     essential = true
     environment = [{
@@ -205,16 +188,11 @@ resource "aws_ecs_task_definition" "bootstrap" {
       name      = "ACCOUNTABLE_DATABASE_MASTER_PASSWORD"
       valueFrom = "${aws_db_instance.cell.master_user_secret[0].secret_arn}:password::"
     }]
-    image            = var.image_uri
-    logConfiguration = local.log_configuration
-    mountPoints = [{
-      containerPath = "/run/accountable"
-      readOnly      = false
-      sourceVolume  = "runtime"
-    }]
+    image                  = var.image_uri
+    logConfiguration       = local.log_configuration
     name                   = "bootstrap"
     readonlyRootFilesystem = true
-  }])
+  })])
   cpu                      = 256
   execution_role_arn       = aws_iam_role.bootstrap_execution.arn
   family                   = "${local.name}-bootstrap"
@@ -222,10 +200,6 @@ resource "aws_ecs_task_definition" "bootstrap" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   task_role_arn            = aws_iam_role.bootstrap.arn
-
-  volume {
-    name = "runtime"
-  }
 
   runtime_platform {
     cpu_architecture        = "ARM64"

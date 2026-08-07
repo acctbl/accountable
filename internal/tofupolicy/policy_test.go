@@ -61,6 +61,15 @@ func TestEvaluateRejectsUnsafeCellMutations(t *testing.T) {
 			mutate: mutate("aws_cloudfront_distribution", "web_acl_id", ""),
 			want:   "WAF",
 		},
+		"caching disabled with compression": {
+			mutate: mutate("aws_cloudfront_cache_policy", "parameters_in_cache_key_and_forwarded_to_origin", []any{
+				map[string]any{
+					"enable_accept_encoding_brotli": true,
+					"enable_accept_encoding_gzip":   true,
+				},
+			}),
+			want: "caching-disabled",
+		},
 	}
 
 	for name, test := range tests {
@@ -407,6 +416,17 @@ func safeResources() []map[string]any {
 		resourceChangeFixture("aws_ecs_task_definition.api", "aws_ecs_task_definition", map[string]any{"container_definitions": `[{"image":"repository@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]`}),
 		resourceChangeFixture("aws_wafv2_web_acl.edge", "aws_wafv2_web_acl", map[string]any{}),
 		resourceChangeFixture("aws_cloudfront_distribution.cell", "aws_cloudfront_distribution", map[string]any{"web_acl_id": "arn:aws:wafv2:us-east-1:453722413624:global/webacl/cell/id"}),
+		resourceChangeFixture("aws_cloudfront_cache_policy.api", "aws_cloudfront_cache_policy", map[string]any{
+			"default_ttl": float64(0),
+			"max_ttl":     float64(0),
+			"min_ttl":     float64(0),
+			"parameters_in_cache_key_and_forwarded_to_origin": []any{
+				map[string]any{
+					"enable_accept_encoding_brotli": false,
+					"enable_accept_encoding_gzip":   false,
+				},
+			},
+		}),
 	}
 }
 

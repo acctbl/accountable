@@ -196,14 +196,53 @@ jobs:
       - name: Apply only the reviewed plan
         env:
           CELL: ${{ inputs.cell }}
+          OPERATION: ${{ inputs.operation }}
+          IMAGE_URI: ${{ inputs.image_uri }}
+          REVISION: ${{ inputs.revision }}
+          INFISICAL_PROJECT_ID: ${{ inputs.infisical_project_id }}
+          API_MACHINE_IDENTITY_ID: ${{ inputs.api_machine_identity_id }}
+          MIGRATE_MACHINE_IDENTITY_ID: ${{ inputs.migrate_machine_identity_id }}
+          BOOTSTRAP_MACHINE_IDENTITY_ID: ${{ inputs.bootstrap_machine_identity_id }}
         run: |
           set -euo pipefail
           mise trust mise.toml
           root="infra/opentofu/environments/development/cells/$CELL"
+          cell_vars=(
+            -var="api_desired_count=0"
+            -var="api_machine_identity_id=$API_MACHINE_IDENTITY_ID"
+            -var="bootstrap_machine_identity_id=$BOOTSTRAP_MACHINE_IDENTITY_ID"
+            -var="configuration_revision=$REVISION"
+            -var="image_uri=$IMAGE_URI"
+            -var="infisical_project_id=$INFISICAL_PROJECT_ID"
+            -var="migrate_machine_identity_id=$MIGRATE_MACHINE_IDENTITY_ID"
+          )
           mise exec -- tofu -chdir="$root" init -input=false
           mise exec -- go run ./cmd/tofupolicy --account-id "$AWS_ACCOUNT_ID" --plan "$RUNNER_TEMP/cell-plan/cell-plan.json"
+          set +e
           mise exec -- tofu -chdir="$root" apply -input=false "$RUNNER_TEMP/cell-plan/cell.plan"
-          if [[ "${{ inputs.operation }}" == "destroy" && -n "$(mise exec -- tofu -chdir="$root" state list)" ]]; then
+          apply_status=$?
+          set -e
+          if [[ "$apply_status" != "0" && "$OPERATION" == "create" ]]; then
+            echo "Create apply failed; destroying partial cell state" >&2
+            mise exec -- tofu -chdir="$root" plan \
+              -input=false \
+              -destroy \
+              -out="$RUNNER_TEMP/cell-create-cleanup.plan" \
+              "${cell_vars[@]}"
+            mise exec -- tofu -chdir="$root" show -json "$RUNNER_TEMP/cell-create-cleanup.plan" > "$RUNNER_TEMP/cell-create-cleanup-plan.json"
+            mise exec -- go run ./cmd/tofupolicy --account-id "$AWS_ACCOUNT_ID" --plan "$RUNNER_TEMP/cell-create-cleanup-plan.json"
+            mise exec -- tofu -chdir="$root" apply -input=false "$RUNNER_TEMP/cell-create-cleanup.plan"
+            if [[ -n "$(mise exec -- tofu -chdir="$root" state list)" ]]; then
+              echo "Partial create cleanup left non-empty cell state" >&2
+              exit 1
+            fi
+            echo "Partial create cleaned up; original create still failed" >&2
+            exit "$apply_status"
+          fi
+          if [[ "$apply_status" != "0" ]]; then
+            exit "$apply_status"
+          fi
+          if [[ "$OPERATION" == "destroy" && -n "$(mise exec -- tofu -chdir="$root" state list)" ]]; then
             echo "Cell state is not empty after destroy" >&2
             exit 1
           fi

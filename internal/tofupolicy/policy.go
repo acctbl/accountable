@@ -234,6 +234,10 @@ func resourceViolations(resources []plannedResource, imageProofs map[string]bool
 			if webACL == "" && (!webACLUnknown || !hasWAF) {
 				violations = append(violations, violation(resource, "CloudFront must have an AWS WAF web ACL"))
 			}
+		case "aws_cloudfront_cache_policy":
+			if cachePolicyDisablesCaching(resource.Values) && cachePolicyEnablesCompression(resource.Values) {
+				violations = append(violations, violation(resource, "caching-disabled CloudFront cache policy cannot enable Accept-Encoding compression"))
+			}
 		}
 	}
 
@@ -420,4 +424,38 @@ func taskImagesUseDigests(value any) bool {
 		}
 	}
 	return true
+}
+
+func cachePolicyDisablesCaching(values map[string]any) bool {
+	return numberIsZero(values["default_ttl"]) && numberIsZero(values["max_ttl"]) && numberIsZero(values["min_ttl"])
+}
+
+func cachePolicyEnablesCompression(values map[string]any) bool {
+	blocks, _ := values["parameters_in_cache_key_and_forwarded_to_origin"].([]any)
+	if len(blocks) == 0 {
+		return false
+	}
+	block, _ := blocks[0].(map[string]any)
+	return boolean(block, "enable_accept_encoding_gzip") || boolean(block, "enable_accept_encoding_brotli")
+}
+
+func numberIsZero(value any) bool {
+	switch typed := value.(type) {
+	case int:
+		return typed == 0
+	case int64:
+		return typed == 0
+	case json.Number:
+		parsed, err := typed.Int64()
+		return err == nil && parsed == 0
+	default:
+		// encoding/json decodes numbers into any as binary floating point;
+		// compare via rendered text so we never name those types.
+		switch fmt.Sprintf("%v", value) {
+		case "0", "0.0":
+			return true
+		default:
+			return false
+		}
+	}
 }

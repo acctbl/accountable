@@ -139,7 +139,7 @@ tasks:
     cmds:
       - >-
         bash scripts/with-test-postgres.sh go test -race
-        ./internal/migration ./tests/foundation -run PostgresIntegration -count=1
+        ./cmd/bootstrap ./internal/migration ./tests/foundation -run PostgresIntegration -count=1
 
   test:managed-contract:
     desc: Prove the S3, KMS, and Infisical adapters against managed development services

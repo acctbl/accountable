@@ -234,7 +234,7 @@ func ensureLoginRole(ctx context.Context, connection *pgx.Conn, role string, pas
 	var statement string
 	if err := connection.QueryRow(
 		ctx,
-		"SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1, $2)",
+		"SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1::text, $2::text)",
 		role,
 		string(passwordBytes),
 	).Scan(&statement); err != nil {

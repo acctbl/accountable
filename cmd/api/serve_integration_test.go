@@ -17,6 +17,7 @@ import (
 	"github.com/acctbl/accountable/gen/go/accountable/probe/v1/probev1connect"
 	systemv1 "github.com/acctbl/accountable/gen/go/accountable/system/v1"
 	"github.com/acctbl/accountable/gen/go/accountable/system/v1/systemv1connect"
+	"github.com/acctbl/accountable/internal/bootstrap"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -204,6 +205,7 @@ func TestArchitectureProbeGateAndRuntimeMiddlewareIntegration(t *testing.T) {
 		AllowedOrigins:    []string{"http://localhost:3000"},
 		UnaryRPCDeadline:  5 * time.Second,
 		StreamRPCDeadline: 25 * time.Second,
+		Foundation:        bootstrap.Config{Revision: "release-under-proof"},
 	}, ready))
 	t.Cleanup(enabledServer.Close)
 	preflight, err := http.NewRequest(http.MethodOptions,
@@ -276,7 +278,7 @@ func TestArchitectureProbeGateAndRuntimeMiddlewareIntegration(t *testing.T) {
 		t.Fatalf("decode liveness body: %v", err)
 	}
 	_ = liveResponse.Body.Close()
-	if len(liveBody) != 3 || liveBody["status"] != "ok" || liveBody["release_id"] != "dev" ||
+	if len(liveBody) != 3 || liveBody["status"] != "ok" || liveBody["release_id"] != "release-under-proof" ||
 		!integrationUUIDV7.MatchString(liveBody["request_id"]) ||
 		liveResponse.Header.Get("X-Request-ID") != liveBody["request_id"] {
 		t.Fatalf("liveness body or headers = (%v, %v)", liveBody, liveResponse.Header)

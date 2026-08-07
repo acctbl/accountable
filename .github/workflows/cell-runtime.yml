@@ -61,6 +61,12 @@ jobs:
         with:
           version: 2026.7.13
 
+      - name: Install web dependencies
+        if: inputs.phase == 'edge-smoke'
+        run: |
+          mise exec -- pnpm install --frozen-lockfile --ignore-scripts
+          mise exec -- pnpm exec playwright install --with-deps chromium firefox webkit
+
       - name: Request AWS apply identity
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
@@ -94,12 +100,6 @@ jobs:
           bash scripts/aws/run-ecs-task.sh "$cluster" "$(jq -r '.bootstrap_task_definition_arn.value' <<<"$output")" "$subnets" "$(jq -r '.bootstrap_security_group_id.value' <<<"$output")"
           bash scripts/aws/run-ecs-task.sh "$cluster" "$(jq -r '.migrate_task_definition_arn.value' <<<"$output")" "$subnets" "$(jq -r '.migrate_security_group_id.value' <<<"$output")"
           bash scripts/aws/run-ecs-task.sh "$cluster" "$(jq -r '.preflight_task_definition_arn.value' <<<"$output")" "$subnets" "$(jq -r '.api_security_group_id.value' <<<"$output")"
-
-      - name: Install web dependencies
-        if: inputs.phase == 'edge-smoke'
-        run: |
-          mise exec -- pnpm install --frozen-lockfile --ignore-scripts
-          mise exec -- pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Publish web release and prove the edge
         if: inputs.phase == 'edge-smoke'

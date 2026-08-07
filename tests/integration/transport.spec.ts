@@ -11,7 +11,8 @@ const connectCode = {
 
 const uuidV7 =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const expectedReleaseId = process.env.ACCOUNTABLE_EXPECTED_RELEASE_ID ?? "dev";
+const expectedReleaseId =
+	process.env.ACCOUNTABLE_EXPECTED_RELEASE_ID ?? "playwright";
 
 async function openProbeShell(page: Page) {
 	await page.goto("/");

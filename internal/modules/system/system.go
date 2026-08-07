@@ -11,11 +11,12 @@ import (
 )
 
 type SystemServer struct {
-	Clock clock.Clock
+	Clock     clock.Clock
+	ReleaseID string
 }
 
-func NewSystemServer(c clock.Clock) *SystemServer {
-	return &SystemServer{Clock: c}
+func NewSystemServer(c clock.Clock, releaseID string) *SystemServer {
+	return &SystemServer{Clock: c, ReleaseID: releaseID}
 }
 
 func (s *SystemServer) GetRuntime(
@@ -24,7 +25,7 @@ func (s *SystemServer) GetRuntime(
 ) (*connect.Response[systemv1.GetRuntimeResponse], error) {
 	identity := apierror.IdentityFromContext(ctx)
 	res := &systemv1.GetRuntimeResponse{
-		ReleaseId:  "dev",
+		ReleaseId:  s.ReleaseID,
 		ServerTime: timestamppb.New(s.Clock.Now()),
 		RequestId:  identity.RequestID,
 	}

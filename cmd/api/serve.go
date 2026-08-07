@@ -35,7 +35,6 @@ const (
 	uploadBodyMaxBytes      = 16 << 20
 	maxHeaderBytes          = 64 << 10
 	maxConnections          = 128
-	releaseID               = "dev"
 )
 
 type config = appconfig.API
@@ -51,7 +50,7 @@ func newAPIHandler(config config, ready *readiness) http.Handler {
 	return newAPIHandlerWithSystem(
 		config,
 		ready,
-		system.NewSystemServer(clock.System{}),
+		system.NewSystemServer(clock.System{}, config.Foundation.Revision),
 	)
 }
 
@@ -61,8 +60,9 @@ func newAPIHandlerWithSystem(
 	systemServer systemv1connect.SystemServiceHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /_health/live", healthHandler(func() bool { return true }))
-	mux.HandleFunc("GET /_health/ready", healthHandler(ready.IsReady))
+	releaseID := config.Foundation.Revision
+	mux.HandleFunc("GET /_health/live", healthHandler(releaseID, func() bool { return true }))
+	mux.HandleFunc("GET /_health/ready", healthHandler(releaseID, ready.IsReady))
 
 	boundary := server.BoundaryInterceptor{}
 	deadline := server.DeadlineInterceptor{
@@ -108,7 +108,7 @@ type healthResponse struct {
 	RequestID string `json:"request_id"`
 }
 
-func healthHandler(healthy func() bool) http.HandlerFunc {
+func healthHandler(releaseID string, healthy func() bool) http.HandlerFunc {
 	return func(response http.ResponseWriter, _ *http.Request) {
 		response.Header().Set("Cache-Control", "no-store")
 		response.Header().Set("Content-Type", "application/json")

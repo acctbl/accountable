@@ -41,9 +41,11 @@ func (ArchitectureProbeServer) CookieRoundTrip(
 	})
 	if req.Msg.GetSetCookie() {
 		response.Header().Add("Set-Cookie", (&http.Cookie{
-			Name:     probeCookieName,
-			Value:    "present",
-			Path:     "/accountable.probe.v1.ArchitectureProbeService/",
+			Name:  probeCookieName,
+			Value: "present",
+			// The edge serves this API under a public /api prefix that the origin
+			// never sees, so an origin-space path would never match on the way back.
+			Path:     "/",
 			MaxAge:   60,
 			Secure:   true,
 			HttpOnly: true,

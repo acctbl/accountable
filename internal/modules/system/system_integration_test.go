@@ -27,7 +27,7 @@ func TestSystemServiceGetRuntimeIntegration(t *testing.T) {
 
 	mux := http.NewServeMux()
 	path, handler := systemv1connect.NewSystemServiceHandler(
-		system.NewSystemServer(clock.Fixed{Instant: want}),
+		system.NewSystemServer(clock.Fixed{Instant: want}, "release-under-proof"),
 		connect.WithInterceptors(server.BoundaryInterceptor{}),
 	)
 	mux.Handle(path, handler)
@@ -40,8 +40,8 @@ func TestSystemServiceGetRuntimeIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRuntime: %v", err)
 	}
-	if res.Msg.GetReleaseId() == "" {
-		t.Fatal("expected release id")
+	if res.Msg.GetReleaseId() != "release-under-proof" {
+		t.Fatalf("release id = %q", res.Msg.GetReleaseId())
 	}
 	serverTime := res.Msg.GetServerTime()
 	if serverTime == nil {

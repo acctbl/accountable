@@ -387,6 +387,7 @@ data "aws_iam_policy_document" "apply_cell" {
       variable = "kms:ViaService"
       values = [
         "rds.${var.region}.amazonaws.com",
+        "s3.${var.region}.amazonaws.com",
         "secretsmanager.${var.region}.amazonaws.com",
       ]
     }

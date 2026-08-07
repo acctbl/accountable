@@ -9,6 +9,7 @@ minimumReleaseAgeExclude:
   - fast-uri
   - hono
   - "@hono/node-server"
+  - js-yaml
 trustPolicy: no-downgrade
 
 catalog:
@@ -40,3 +41,4 @@ overrides:
   hono: ^4.12.34
   "@hono/node-server": ^2.1.0
   ip-address: ^10.2.1
+  js-yaml: 4.3.1

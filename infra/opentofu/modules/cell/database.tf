@@ -16,7 +16,7 @@ resource "aws_db_instance" "cell" {
   deletion_protection             = var.cell_lifecycle == "durable"
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
   engine                          = "postgres"
-  engine_version                  = "17.10"
+  engine_version                  = "18.4"
   identifier                      = local.name
   instance_class                  = "db.t4g.micro"
   kms_key_id                      = aws_kms_key.cell.arn

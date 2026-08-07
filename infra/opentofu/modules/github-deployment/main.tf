@@ -187,6 +187,7 @@ data "aws_iam_policy_document" "apply_cell" {
       "ec2:DescribeVpcEndpoints",
       "ec2:DescribeVpcs",
       "ec2:DetachInternetGateway",
+      "ec2:DisassociateAddress",
       "ec2:DisassociateRouteTable",
       "ec2:ModifySubnetAttribute",
       "ec2:ModifyVpcAttribute",

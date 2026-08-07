@@ -230,12 +230,14 @@ run "tasks_use_tmpfs_runtime_scratch" {
       ] :
       strcontains(definitions, "\"tmpfs\"") &&
       strcontains(definitions, "/run/accountable") &&
-      strcontains(definitions, "mode=1777") &&
+      strcontains(definitions, "uid=65532") &&
+      strcontains(definitions, "gid=65532") &&
+      strcontains(definitions, "mode=0700") &&
       strcontains(definitions, "\"readonlyRootFilesystem\":true") &&
       !strcontains(definitions, "mountPoints") &&
       !strcontains(definitions, "sourceVolume")
     ])
-    error_message = "Runtime tasks must use a mode=1777 tmpfs at /run/accountable instead of root-owned bind mounts."
+    error_message = "Runtime tasks must use a tmpfs at /run/accountable owned by the image user instead of root-owned bind mounts."
   }
 
   assert {

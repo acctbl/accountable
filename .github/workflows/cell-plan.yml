@@ -16,11 +16,12 @@ on:
         type: choice
         options:
           - create
+          - prepare
           - deploy
           - converge
           - destroy
       apply:
-        description: Apply the saved plan after protected approval
+        description: Apply the saved plan in the development environment
         required: true
         default: false
         type: boolean

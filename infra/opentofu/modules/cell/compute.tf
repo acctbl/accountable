@@ -81,7 +81,7 @@ locals {
     linuxParameters = {
       tmpfs = [{
         containerPath = "/run/accountable"
-        mountOptions  = ["rw", "noexec", "nosuid", "nodev", "mode=1777"]
+        mountOptions  = ["rw", "noexec", "nosuid", "nodev", "uid=65532", "gid=65532", "mode=0700"]
         size          = 64
       }]
     }

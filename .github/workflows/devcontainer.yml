@@ -25,9 +25,12 @@ jobs:
             .
 
       - name: Run the same root Task command in the dev container
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
         run: |
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/workspaces/accountable" \
             --workdir /workspaces/accountable \
             --env CI=1 \
+            --env MISE_GITHUB_TOKEN \
             accountable-devcontainer:ci bash .devcontainer/parity.sh

@@ -39,8 +39,6 @@ roots=(
 	environments/security-backup/audit
 	environments/organization/bootstrap
 	environments/organization/foundation
-	migrations/development-legacy/bootstrap
-	migrations/development-legacy/combined
 	modules/account-foundation
 	modules/environment-foundation
 	modules/github-deployment
